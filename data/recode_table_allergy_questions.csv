@@ -1,0 +1,42 @@
+﻿"question_short";"response_values";"interpretation";"recode_value"
+"allergic_to_animals";"0";"No";0
+"allergic_to_animals";"1";"Yes";1
+"allergies_family";"1";"Yes";1
+"allergies_family";"1 - 2";"No - Yes";1
+"allergies_family";"1 - 2 - 2";"No - No - Yes";1
+"allergies_family";"2";"No";0
+"allergies_family";"3";"I don't know";
+"contact_bird";"0";"No";0
+"contact_bird";"0 - 1";"No - Yes";1
+"contact_bird";"1";"Yes";1
+"contact_cat";"0";"No";0
+"contact_cat";"0 - 1";"No - Yes";1
+"contact_cat";"1";"Yes";1
+"contact_dog";"0";"No";0
+"contact_dog";"0 - 1";"No - Yes";1
+"contact_dog";"1";"Yes";1
+"contact_fish";"0";"No";0
+"contact_fish";"0 - 1";"No - Yes";1
+"contact_fish";"1";"Yes";1
+"contact_livestock";"0";"No";0
+"contact_livestock";"1";"Yes";1
+"contact_reptile";"0";"No";0
+"contact_reptile";"1";"Yes";1
+"contact_rodent";"0";"No";0
+"contact_rodent";"1";"Yes";1
+"disease_hinders_atop";"1";"No";0
+"disease_hinders_atop";"2";"Yes, sometimes";1
+"disease_hinders_atop";"3";"Yes, often";2
+"general_health_child";"1";"Very good";3
+"general_health_child";"1 - 2";"Good - Very good";2
+"general_health_child";"2";"Good";2
+"general_health_child";"2 - 3";"Good - Reasonable";1
+"general_health_child";"3";"Reasonable";1
+"has_asthma";"0";"No";0
+"has_asthma";"1";"Yes";1
+"has_hay_fever";"0";"No";0
+"has_hay_fever";"0 - 1";"No - Yes";1
+"has_hay_fever";"1";"Yes";1
+"other_chronic_disease";"0";"No";0
+"other_chronic_disease";"0 - 1";"No - Yes";1
+"other_chronic_disease";"1";"Yes";1
