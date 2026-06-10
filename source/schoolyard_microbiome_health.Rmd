@@ -1,0 +1,3421 @@
+---
+title: "Supplementary information for _Environmental bacteria link green schoolyards to better child well-being and fewer allergy symptoms_"
+author: "Hans Van Calster"
+date: "`r Sys.Date()`"
+output:
+  bookdown::html_document2:
+    toc: true
+    toc_float: true
+    code_folding: hide
+editor_options: 
+  markdown: 
+    wrap: sentence
+  chunk_output_type: console
+bibliography: health_paper.yaml
+---
+
+```{r setup, include=FALSE}
+# follow the instructions in file source/reproduce.R
+library(knitr)
+library(here)
+opts_chunk$set(
+    echo = FALSE, message = FALSE, out.width = "100%",
+  dev = "png", dpi = 300)
+opts_knit$set(root.dir = here())
+library(frictionless)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(purrr)
+library(ggplot2)
+library(modelsummary)
+library(performance)
+library(patchwork)
+library(brms)
+library(tidybayes)
+library(bayestestR)
+library(INBOtheme)
+library(bayesplot)
+library(posterior)
+
+theme_set(theme_inbo(transparent = TRUE))
+
+conflicted::conflicts_prefer(brms::ar)
+conflicted::conflicts_prefer(tidyr::expand)
+conflicted::conflicts_prefer(brms::lognormal)
+conflicted::conflicts_prefer(brms::loo)
+conflicted::conflicts_prefer(tidyr::pack)
+conflicted::conflicts_prefer(tidyr::unpack)
+conflicted::conflicts_prefer(dplyr::filter)
+conflicted::conflicts_prefer(dplyr::lag)
+
+theme_set(theme_inbo(transparent = TRUE))
+model_folder <- here(
+    "source", "model_objects_paper"
+  )
+data_objects_folder <- here(
+    "source", "data_objects_paper"
+)
+
+fs::dir_create(model_folder)
+fs::dir_create(data_objects_folder)
+```
+
+```{r cache=TRUE, results='hide'}
+1 + 1
+# just a trick to prevent the folder containing figures from being removed
+# when knitting a self-contained document
+```
+
+```{css, echo=FALSE}
+img {
+  max-width:150%;
+  height: auto;
+}
+
+.warning {
+  background-color: #fcf8e3;
+  color: #8a6d3b;
+  padding: 15px;
+  border-left: 5px solid #faebcc;
+  border-radius: 4px;
+  margin-bottom: 15px;
+}
+```
+
+```{r colours}
+school_colours <- c(
+  `green` = "#40B0A6",
+  `non-green` = "#E1BE6A"
+)
+```
+
+# Data preparation
+
+::: {.warning}
+**Warning:** This document contains the analysis pipeline that was used for the paper _Environmental bacteria link green schoolyards to better child well-being and fewer allergy symptoms_.
+While the code is identical, the data used in this document is a (large) subset of the data used in the paper.
+The reason for this is that some participants / parents did not give consent for long-term storage / archiving of their data.
+As such, we had permission to use their data in publications, but not to publish their data in a long-term public archive.
+The data used in this repository, which are downloaded from <https://doi.org/10.5281/zenodo.10527033> (see `source/reproduce.R`), therefore only include data from participants / parents that gave consent for long-term storage of their data.
+As a consequence, the results from the paper are not exactly reproducible.
+:::
+
+
+```{r cleaned-data}
+cleaned_data <- read_package(
+  here::here(
+    "data",
+    "datapackage_an_zenodo_cleaned_data",
+    "datapackage.json"
+  )
+)
+```
+
+```{r derived-data}
+derived_data <- read_package(
+  here::here(
+    "data",
+    "datapackage_an_zenodo_derived_data",
+    "datapackage.json"
+  )
+)
+
+# resources(derived_data)
+dd_school_level <- read_resource(
+  derived_data, "wp1_school_level_key_variables"
+) |>
+  mutate(
+    landscape_type = factor(
+      landscape_type, levels = c("low naturalness", "high naturalness")),
+    school_context = factor(
+      school_context, levels = c("low greenness", "high greenness")
+    )
+  )
+
+dd_child_level <- read_resource(
+  derived_data, "wp1_child_level_key_variables"
+)
+
+
+kidscreen_groups <- read_resource(
+  cleaned_data,
+  resource_name = "wp4_kidscreen_questions"
+) |>
+  distinct(question_group) |>
+  rename(label = question_group) |>
+  mutate(
+    level = c("tscorephy", "tscorepwb", "tscorepar", "tscoresoc", "tscoresch")
+  )
+
+# reorder
+kidscreen_groups <- kidscreen_groups[c(5,2,1,3,4),]
+
+kidscreen_groups$label[kidscreen_groups$level == "tscorephy"] <-
+  "Physical well-being"
+```
+
+```{r health-data}
+health_data <- dd_child_level |>
+  group_by(school_id) |>
+  mutate(
+    ses_mean = mean(ses, na.rm  = TRUE),
+    ses_centered = ses - ses_mean,
+  ) |>
+  select(-ses, -ses_dimensions, -ses_dimensions_relative) |>
+  left_join(
+    dd_school_level |>
+      select(
+        school_id,
+        community,
+        province_name,
+        landscape_type,
+        school_context,
+        case_control_id,
+        ses_school = ses,
+        natural_elements_score,
+        tree_number,
+        artificial_elements_score,
+        allergenic_potential,
+        mean_log_sirm,
+        mean_sirm_logratio,
+        pm25
+      ),
+    by = join_by(school_id)) |>
+  mutate(
+    eczema_01 = ifelse(eczema < 0, 0, 1),
+    rhinitis_01 = ifelse(rhinitis < 0, 0, 1),
+    wheezing_01 = ifelse(wheezing < 0, 0, 1),
+    n_sensitive = eczema_01 + rhinitis_01 + wheezing_01
+  ) |>
+  ungroup()
+```
+
+```{r calc-nature-exposure}
+outdoor_play <- read_resource(
+  package = cleaned_data,
+  resource_name = "wp5_parents_outdoor_play_data_part2"
+)
+outdoor_play <- outdoor_play |>
+    filter(
+      question_code %in% 
+        c("x5_5", "x5_7", "x5_8", "x5_9", "x5_11", "x5_12", "x5_13", "x5_14",
+          "x5_15", "x5_17", "x5_18")) |>
+    mutate(response = ifelse(
+      response == "no association - association",
+      0.5,
+      ifelse(response == "association",
+             1,
+             ifelse(response == "no association",
+                    0,
+                    NA)
+             )
+      )
+    ) |>
+  group_by(child_id,question_code) |>
+  summarise(response = mean(response, na.rm = TRUE)) |>
+  ungroup() |>
+  group_by(child_id) |>
+  summarise(nature_exposure = sum(response) / 11)
+
+health_data <- health_data |>
+  left_join(outdoor_play, by = "child_id")
+```
+
+```{r garden-data}
+living_env <- read_resource(
+  cleaned_data, "wp5_parents_living_environment_data")
+
+garden_data_recoded <- living_env |>
+  filter(grepl("^garden", question_short)) |>
+  mutate(
+    response_recoded = case_when(
+      question_short == "garden_present" & response_values == "1" ~ 0,
+      question_short == "garden_present" & response_values != "1" ~ 1,
+      question_short == "garden_size" & response_values == "1" ~ 0,
+      question_short == "garden_size" & response_values == "2" ~ 1,
+      question_short == "garden_size" & response_values == "2 - 3" ~ 1.5,
+      question_short == "garden_size" & response_values == "3" ~ 2,
+      question_short == "garden_size" & response_values == "4" ~ 3,
+      question_short == "garden_type" & response_values == "1" ~ 0,
+      question_short == "garden_type" & response_values == "1 - 3" ~ 1,
+      question_short == "garden_type" & response_values == "2" ~ 1,
+      question_short == "garden_type" & response_values == "3" ~ 2,
+      question_short == "garden_type" & response_values == "4" ~ 1.5,
+      question_short == "garden_usage" ~ as.numeric(response_values) - 1
+    )
+  )
+
+garden_data <- garden_data_recoded |>
+  pivot_wider(
+    id_cols = c(child_id, replicate_id, case),
+    names_from = question_short,
+    values_from = response_recoded,
+    values_fill = list(response_recoded = 0)) |>
+  mutate(
+    garden_score = (garden_size / 3 + garden_type / 2 + garden_usage / 3) / 3
+  ) |>
+  select(child_id, garden_present, garden_score) |>
+  group_by(child_id) |> 
+  summarise(
+    garden_present = max(garden_present, na.rm = TRUE),
+    garden_score = mean(garden_score, na.rm = TRUE)
+  ) |>
+  ungroup()
+
+health_data <- health_data |>
+  left_join(garden_data, by = "child_id")
+```
+
+```{r add-allergy-family-data}
+allergy_related <- read_resource(
+  cleaned_data, "wp5_parents_allergy_related_questions_data")
+
+recode_table <- readr::read_csv2(
+     here("data", "recode_table_allergy_questions.csv")
+   )
+
+allergy_related <- allergy_related |>
+  inner_join(recode_table,
+             by = join_by(question_short, response_values, interpretation)) |>
+  select(child_id, question_short, recode_value)
+
+# some are not uniquely defined, using max to collapse them
+allergy_related <- allergy_related |>
+  pivot_wider(
+    names_from = question_short,
+    values_from = recode_value,
+    values_fn = max
+  )
+
+allergy_related <- allergy_related |>
+  mutate(
+    sum_contact_animals = rowSums(across(starts_with("contact")))
+    ) |>
+  select(!(starts_with("contact") | disease_hinders_atop))
+
+health_data <- health_data |>
+  left_join(
+    allergy_related,
+    by = join_by(child_id)
+  ) |> 
+  mutate(
+    f_allergies_family = case_when(
+      is.na(allergies_family) ~ "unknown",
+      allergies_family == 0 ~ "no",
+      allergies_family == 1 ~ "yes"
+    )
+  )
+
+```
+
+
+
+
+```{r read-microbiome-diversity}
+env_samples_diversity <- readr::read_csv(
+  here("data", "env_samples_diversity.csv")
+)
+skin_samples_diversity <- readr::read_csv(
+  here("data", "skin_samples_diversity.csv")
+)
+```
+
+```{r add-diversity}
+health_data <- health_data |>
+  left_join(
+    skin_samples_diversity,
+    by = join_by(child_id)
+  ) |>
+  left_join(
+    env_samples_diversity,
+    by = join_by(school_id)
+  ) |> 
+  mutate(
+    log_inverse_simpson_skin = log(inverse_simpson_skin),
+    log_invsimpson_plant = log(invsimpson_plant),
+    log_invsimpson_dust = log(invsimpson_dust),
+    log_invsimpson_soil = log(invsimpson_soil),
+    log_total_count_skin = log(total_count_skin)
+  )
+```
+
+```{r rescale-t-scores}
+# rescale t-scores (which by construction have a mean of 50 and sd of 10)
+health_data <- health_data |>
+  mutate(
+    across(
+      starts_with("t_score"),
+      \(x) (x - 50) / 10)
+  )
+```
+
+
+
+```{r add-missing-natural-elements-score}
+# some schools have no natural elements score
+# these missing values were imputed by manual interpretation of photo's 
+# from the playgrounds
+health_data <- health_data |>
+  mutate(
+    natural_elements_score = case_when(
+      school_id == "01" ~ 1 / 16,
+      school_id == "11" ~ (1 + 1 + 1 + 1 + (2 / 75) ^ 0.2) / 16,
+      school_id == "27" ~ 3 / 16,
+      school_id == "32" ~ mean(
+        c(
+          (1 + 1 + 1 + 1 + (15 / 75) ^ 0.2) / 16,
+          (1 + 1 + 1 + 1 + (20 / 75) ^ 0.2) / 16,
+          (1 + 1) / 16 
+        )),
+      school_id == "36" ~ (1 + 1 + 1 + 1 + 1 + 1 + (10 / 75) ^ 0.2) / 16,
+      TRUE ~ natural_elements_score
+    ))
+```
+
+
+# Data analysis
+
+## School and participant characteristics
+
+A total of 167 schools were contacted out of which 40 expressed interest to participate and 37 participated; these 37 schools had 929 children in the fifth grade out of which 527 children (57%) gave consent to participate in at least one of the tests (Fig. \@ref(fig:flowcharts)).
+
+(ref:flowcharts) Flowchart depicting the number of schools that were contacted, interested and participated (left-side, and the number of fifth grade children that gave consent and for which at least one test was available (right-side).
+
+```{r flowcharts, fig.cap="(ref:flowcharts)", out.width=c("100%")}
+knitr::include_graphics(
+  here("media", "flowchart.png"),
+  rel_path = FALSE
+)
+```
+
+Low naturalness landscape schools were typically found in urbanized areas and characterized by high levels of impervious surfaces and low levels of combined forest and grassland cover.
+High naturalness landscape schools were found in rural areas with low levels of impervious surfaces and high levels of combined forest and grassland cover.
+
+## Descriptive statistics of the study population
+
+Table \@ref(tab:table1) shows descriptive statistics of the main variables in our sample.
+The number of participating children in schools labelled as 'low greenness' is about 1.5 times higher compared to those in 'high greenness' schools.
+
+(ref:table1) Description of main characteristics of the study population. *N* is the number of children.
+
+```{r table1, tab.cap="(ref:table1)"}
+data_to_summarize <- health_data |>
+  select(
+    landscape_type, school_context,
+    ses_mean, ses_centered, biological_sex,
+    birth_year, community,
+    clusters = school_id
+  ) |>
+  mutate(
+    community = ifelse(
+      community == "Dutch speaking.French speaking",
+      "French speaking", community),
+    lt_sc = interaction(landscape_type, school_context, lex.order = TRUE)
+  )
+
+t0 <- modelsummary::datasummary_balance(
+  formula = ses_mean + ses_centered + birth_year + biological_sex +
+    community ~ lt_sc,
+  data = data_to_summarize,
+  dinm = FALSE,
+  output = "kableExtra"
+  )
+
+t0
+```
+
+## Exploration health outcomes
+
+Missingness is about 4% for ISAAC data, 10% for KIDSCREEN data and 31% for outcomes derived from the parent questionnaires.
+
+```{r}
+health_outcomes <- health_data |>
+  select(
+    starts_with("t_score"),
+    ends_with("_01"),
+    n_sensitive,
+    allergic_to_animals,
+    general_health_child,
+    has_asthma,
+    has_hay_fever
+  )
+
+health_outcomes |>
+  naniar::vis_miss()
+```
+
+We calculate Spearman rank correlations between outcomes and visualise them.
+
+The KIDSCREEN scores are all positively correlated with each other.
+
+-   phy: physical well-being
+-   sch: well being at school
+-   par: family life and free time
+-   pwb: general mood and how you feel
+-   soc: friends
+
+The ISAAC scores are also correlated but to a lesser extent.
+The `n_sensitive` variable is positively correlated with eczema, rhinitis and wheezing by construction (equals their sum).
+
+The outcomes derived from the parents survey are positively correlated except for general health of the child.
+
+```{r}
+cordat <- health_outcomes |>
+  cor(method = "spearman", use = "pairwise.complete.obs")
+
+corrplot::corrplot(cordat)
+```
+
+## Exploration of covariates
+
+### Microbial diversity
+
+```{r}
+health_data |>
+  select(
+    starts_with("inv")
+  ) |>
+  pairs()
+
+health_data |>
+  select(
+    starts_with("obs")
+  ) |>
+  pairs()
+
+health_data |>
+  select(ends_with("skin")) |>
+  plot()
+
+health_data |>
+  select(ends_with("plant")) |>
+  plot()
+
+health_data |>
+  select(ends_with("soil")) |>
+  plot()
+
+health_data |>
+  select(ends_with("dust")) |>
+  plot()
+```
+
+### Missingness
+
+```{r potential-covariates}
+covars <- ~
+  landscape_type +
+  school_context +
+  biological_sex +
+  ses_mean +
+  ses_centered +
+  pm25 +
+  natural_elements_score +
+  nature_connectedness +
+  garden_score +
+  mean_log_sirm +
+  inverse_simpson_skin +
+  invsimpson_dust +
+  invsimpson_plant +
+  invsimpson_soil +
+  sum_contact_animals +
+  allergies_family
+```
+
+```{r missingness}
+health_data |>
+  select(
+    all_of(all.vars(covars))) %>%
+  mutate(all_combined = ifelse(complete.cases(.), 1, NA)) |>
+  naniar::vis_miss(cluster = TRUE, sort_miss = TRUE) +
+  expand_limits(x = 22)
+```
+
+
+### Collinearity
+
+The strongest correlation between continuous covariates equals 0.52 and is between `pm25` and `ses_mean`.
+This is a modest correlation and it is likely not problematic to include both covariates in a model.
+
+```{r collinearity1}
+cordat2 <- health_data |>
+  select(
+    all_of(all.vars(covars))) |>
+  select(where(is.double)) |>
+  cor(method = "spearman", use = "pairwise.complete.obs")
+
+corrplot::corrplot(
+  cordat2,
+  order = "AOE",
+  diag = FALSE,
+  addCoef.col = 'darkgrey',
+  number.cex = 0.8)
+```
+
+We also look at relationships between categorical and continuous covariates.
+The resulting relationships do not indicate collinearity problems.
+One minor concern is that the range of `ses_mean` values within high naturalness landscape for high greenness schools is more restricted compared to the other factor combinations.
+
+```{r collinearity2, fig.height=200/25.4}
+health_data |>
+  select(
+    all_of(all.vars(covars))) |>
+  pivot_longer(
+    cols = where(is.double),
+    names_to = "covariate",
+    values_to = "value"
+  ) |>
+  mutate(
+    school_context = factor(
+      school_context,
+      levels = c("low greenness", "high greenness"),
+      labels = c("non-green", "green")
+    )
+  ) |> 
+  ggplot() +
+  stat_sum(
+    aes(
+      x = landscape_type,
+      y = value,
+      colour = school_context,
+      shape = biological_sex
+    ),
+    alpha = 0.5,
+    position = position_dodge(width = 0.5)
+  ) +
+  scale_colour_manual(values = school_colours) +
+  facet_wrap(
+    ~ covariate |> str_replace_all("_", " ") |> str_wrap(15),
+    scales = "free_y") +
+  theme(legend.position = "top") +
+  guides(
+    colour = guide_legend(ncol =  1, direction = "vertical"),
+    shape = guide_legend(ncol = 2, direction = "vertical"),
+    size = guide_legend(nrow = 1, direction = "vertical")
+  ) +
+  scale_x_discrete(labels = \(x) str_wrap(x, 10))
+```
+
+## KIDSCREEN-27 model
+
+We model only all five kidscreen dimensions.
+Included all two-way interactions between mean SES, Schoolyard and landscape type.
+The scores are modelled with a Gaussian distribution and an identity link.
+All missing data are imputed during model fit.
+Missing data are declared as parameters to be estimated by there own sets of regression equations that include the interaction between schoolyard and landscape type, as well as a random intercept for school in case of child-level varying covariates.
+For the main equations, correlations between the school random intercepts are modelled as well.
+
+```{r adj-mi-ks}
+rhs_ks <- ~ mi(ses_mean) +
+  landscape_type +
+  school_context +
+  landscape_type:school_context +
+  mi(ses_mean):school_context +
+  mi(ses_mean):landscape_type +
+  #child-level characteristics
+  biological_sex +
+  mi(ses_centered) +
+  mi(garden_score) +
+  mi(nature_connectedness) +
+  #school-level characteristics
+  natural_elements_score +
+  #scale(pm25) +
+  mi(mean_log_sirm) +
+  (1 | q | school_id)
+
+bf_adj_mi_ks <- 
+  bf(
+    update(rhs_ks, t_score_phy | mi() ~ .),
+    decomp = "QR",
+    family = gaussian()
+  ) +
+    bf(
+    update(rhs_ks, t_score_par | mi() ~ .),
+    decomp = "QR",
+    family = gaussian()
+  ) +
+  bf(
+    update(rhs_ks, t_score_pwb | mi() ~ .),
+    decomp = "QR",
+    family = gaussian()
+  ) +
+  bf(
+    update(rhs_ks, t_score_sch | mi() ~ .),
+    decomp = "QR",
+    family = gaussian()
+  ) +
+  bf(
+    update(rhs_ks, t_score_soc | mi() ~ .),
+    decomp = "QR",
+    family = gaussian()
+  ) +
+  bf(
+    nature_connectedness | mi() ~ school_context*landscape_type + (1|school_id),
+    family = gaussian()
+  ) +
+  bf(
+    ses_centered | mi() ~ school_context*landscape_type + (1|school_id),
+    family = gaussian()
+  ) +
+  bf(
+    ses_mean | mi() + trunc(lb = 0, ub = 1) ~ school_context*landscape_type,
+    family = gaussian()
+  ) +
+  bf(
+    garden_score | mi() ~ school_context*landscape_type + (1|school_id),
+    family = gaussian()
+  ) +
+  bf(
+    mean_log_sirm | mi() + trunc(lb = 0) ~ school_context*landscape_type,
+    family = gaussian()
+  ) +
+  set_rescor(FALSE)
+
+priors <- set_prior(
+  prior = "normal(0, 2)", class = "b",
+  resp = c("gardenscore", "meanlogsirm", "natureconnectedness", 
+"sescentered", "sesmean", "tscorephy")
+  )
+
+
+mv_adj_mi_ks <- brm(
+    formula = bf_adj_mi_ks,
+    data = health_data,
+    prior = priors,
+    cores = 4,
+    silent = 2,
+    refresh = 0,
+    chains = 4,
+    backend = "cmdstanr",
+    normalize = FALSE,
+    file_refit = "on_change",
+    file = file.path(
+      model_folder,
+      "mv_adj_mi_ks")
+)
+
+```
+
+```{r summary-ks}
+pvals <- pd(mv_adj_mi_ks) |>
+  as_tibble() |>
+  separate_wider_delim(
+    Parameter,
+    delim = "_",
+    too_many = "merge",
+    names = c("dropme", "response", "parameter")) |>
+  select(-dropme) |>
+  mutate(p_value = pd_to_p(pd)) |>
+  select( -Effects, -Component)
+
+gather_draws(mv_adj_mi_ks, `b_tsc.*|bsp_tsc.*`, regex = TRUE) |>
+  separate_wider_delim(
+    .variable,
+    delim = "_",
+    too_many = "merge",
+    names = c("dropme", "response", "parameter")) |>
+  select(-dropme) |>
+  group_by(response, parameter) |>
+  summarise_draws() |>
+  inner_join(pvals) |>
+  relocate(p_value, .before = rhat) |>
+  select(-variable, -rhat, -ess_bulk, -ess_tail) |>
+  kable(digits = 2)
+```
+
+```{r mcmc-intervals-ks}
+#get_variables(mv_adj_mi_ks) |> head()
+mcmc_draws <- as_draws_rvars(mv_adj_mi_ks)
+
+parameter <- names(mcmc_draws)
+rvars <- map_vec(mcmc_draws, \(x) x[[1]])
+mcmc_df <- tibble(
+  parameter = parameter,
+  rvar = rvars
+)
+
+mcmc_df <- mcmc_df |>
+  filter(
+    grepl("^(b|bsp)_tscore", parameter)
+  ) |>  mutate(
+    parameter = gsub("^(b|bsp)_tscore", "", parameter),
+    parameter = gsub("landscape_typehighnaturalness", "Rural", parameter),
+    parameter = gsub("school_contexthighgreenness", "Green schoolyard", parameter),
+    parameter = gsub("biological_sexFemale", "Biological sex - girl", parameter),
+    parameter = gsub("natural_elements_score", "Natural elements score", parameter),
+    parameter = gsub("mises_centered", "Deviation school SES", parameter),
+    parameter = gsub("mises_mean", "Mean school SES", parameter),
+    parameter = gsub("migarden_score", "Garden score", parameter),
+    parameter = gsub("mimean_log_sirm", "Local air pollution", parameter),
+    parameter = gsub("minature_connectedness", "Nature connectedness", parameter)
+  ) |> 
+  separate_wider_delim(cols = parameter, delim = "_", names = c("response", "parameter"))
+
+ks_alldata <- mcmc_intervals_data(
+  mv_adj_mi_ks,
+  regex_pars = "^(b|bsp)_tscore",
+  prob = 0.5, # inner interval probability mass
+  prob_outer = 0.9, # outer interval probability mass
+  point_est = "median"
+) |> 
+  mutate(
+    parameter = gsub("^(b|bsp)_tscore", "", parameter),
+    parameter = gsub("landscape_typehighnaturalness", "Rural", parameter),
+    parameter = gsub("school_contexthighgreenness", "Green schoolyard", parameter),
+    parameter = gsub("biological_sexFemale", "Biological sex - girl", parameter),
+    parameter = gsub("natural_elements_score", "Natural elements score", parameter),
+    parameter = gsub("mises_centered", "Deviation school SES", parameter),
+    parameter = gsub("mises_mean", "Mean school SES", parameter),
+    parameter = gsub("migarden_score", "Garden score", parameter),
+    parameter = gsub("mimean_log_sirm", "Local air pollution", parameter),
+    parameter = gsub("minature_connectedness", "Nature connectedness", parameter)
+  ) |> 
+  separate_wider_delim(cols = parameter, delim = "_", names = c("response", "parameter")) |> 
+  mutate(
+    parameter = reorder(parameter, m)
+  ) 
+```
+
+\@ref(fig:mcmc-intervals-kidscreen-all-data)
+
+(ref:mcmc-intervals-kidscreen-all-data) Parameter estimates for the effects on physical well-being (scores are rescaled by subtracting 50 and dividing the result by 10). Point estimates represent the median of the posterior distribution. Thick and thin lines show 50% and 90% inner probability mass of the posterior distribution. Effects are with reference to urban landscape type, boys and non-green schoolyards.
+
+```{r mcmc-intervals-kidscreen-all-data, fig.height=6, out.width="100%", fig.cap= "(ref:mcmc-intervals-kidscreen-all-data)"}
+mcmc_intervals_kidscreen_all_data <- ks_alldata |>
+  filter(
+    parameter != "Intercept") |>
+  ggplot() +
+  geom_vline(xintercept = 0, alpha = 0.5) +
+  geom_linerange(
+    aes(
+      x = m,
+      xmin = ll,
+      xmax = hh,
+      y = parameter,
+      colour = response
+    ),
+    linewidth = 1, alpha = 0.5, position = position_dodge(width = 0.5)
+  ) +
+  geom_linerange(
+    aes(
+      x = m,
+      xmin = l,
+      xmax = h,
+      y = parameter,
+      colour = response
+    ),
+    linewidth = 2, alpha = 0.5, position = position_dodge(width = 0.5)
+  ) +
+  geom_point(
+    aes(
+      x = m,
+      y = parameter,
+      colour = response
+    ),
+    size = 3, alpha = 0.5, position = position_dodge(width = 0.5)
+  ) +
+  labs(
+    x = "Self-reported physical well-being (KIDSCREEN)"
+  ) +
+  theme(axis.title.y = element_blank())
+
+mcmc_intervals_kidscreen_all_data
+
+saveRDS(
+  mcmc_intervals_kidscreen_all_data,
+  file = file.path(data_objects_folder, "mcmc_intervals_kidscreen_all_data.rds")
+)
+```
+
+```{r ppcheck-ks}
+responses <- mv_adj_mi_ks$formula$responses
+checks <- vector("list", length(responses))
+for (i in seq_along(responses)) {
+  checks[[i]] <- pp_check(
+    mv_adj_mi_ks,
+    resp = responses[i],
+    ndraws = 50) + labs(x = responses[i])
+}
+checks |>
+  wrap_plots()
+```
+
+Interaction schoolyard and landscape-type:
+
+```{r adj-mi-ks-preds-sclt, out.width="120%"}
+preds <- conditional_effects(
+  mv_adj_mi_ks,
+  effects = "landscape_type:school_context",
+  resp = c("tscorephy", "tscorepwb", "tscorepar", "tscoresoc", "tscoresch")
+  )
+
+
+preds_df <- map2_dfr(
+  preds,
+  names(preds),
+  function(x, y) {
+    response <- stringr::str_extract(y, "^\\w*")
+    x$response <- response
+    x
+  }
+)
+
+preds_df <- preds_df |>
+  mutate(
+    landscape_type = factor(
+      landscape_type,
+      levels = c("low naturalness", "high naturalness"),
+      labels = c("urban", "rural")
+    ),
+    school_context = factor(
+      school_context,
+      levels = c("low greenness", "high greenness"),
+      labels = c("non-green", "green")
+    ),
+    response = factor(
+      response,
+      levels = kidscreen_groups$level,
+      labels = kidscreen_groups$label
+    )
+  ) |>
+  as_tibble()
+
+p_ks_sc_lt <- preds_df |>
+  ggplot() +
+  geom_pointrange(
+    aes(
+      x = landscape_type,
+      y = estimate__ * 10 + 50,
+      ymin = lower__ * 10 + 50,
+      ymax = upper__ * 10 + 50,
+      colour = school_context
+    ),
+    position = position_dodge(width = 0.5)
+  ) +
+  scale_colour_manual(values = school_colours) +
+  scale_y_continuous(breaks = seq(30, 60, 5)) +
+  facet_grid(cols = vars(response), labeller = label_wrap_gen(width = 15)) +
+  labs(
+    x = "Landscape type",
+    colour = "Schoolyard",
+    y = "KIDSCREEN-27 score +/- 95% CI"
+  )
+
+p_ks_sc_lt
+saveRDS(
+  p_ks_sc_lt,
+  file = file.path(data_objects_folder, "p_ks_sc_lt.rds")
+)
+```
+
+```{r adj-mi-ks-preds-sclt-school-effects, out.width="120%"}
+preds <- conditional_effects(
+  mv_adj_mi_ks,
+  effects = "school_id",
+  conditions = make_conditions(
+    mv_adj_mi_ks,
+    c("landscape_type", "school_context")
+  ),
+  resp = c("tscorephy", "tscorepwb", "tscorepar", "tscoresoc", "tscoresch"),
+  re_formula = NULL
+  )
+
+
+preds_df <- map2_dfr(
+  preds,
+  names(preds),
+  function(x, y) {
+    response <- stringr::str_extract(y, "^\\w*")
+    x$response <- response
+    x
+  }
+)
+
+school_cats <- health_data |>
+  distinct(school_id, landscape_type, school_context)
+
+preds_df <- preds_df |>
+  semi_join(school_cats, by = join_by(school_id, landscape_type, school_context))
+
+preds_df <- preds_df |>
+  mutate(
+    landscape_type = factor(
+      landscape_type,
+      levels = c("low naturalness", "high naturalness"),
+      labels = c("urban", "rural")
+    ),
+    school_context = factor(
+      school_context,
+      levels = c("low greenness", "high greenness"),
+      labels = c("non-green", "green")
+    ),
+    response = factor(
+      response,
+      levels = kidscreen_groups$level,
+      labels = kidscreen_groups$label
+    )
+  ) |>
+  as_tibble()
+
+p_ks_sc_lt_school_effects <- preds_df |>
+    # Group by the facet and x-axis variable
+  group_by(response, landscape_type) |> 
+  # Sort ascending by estimate__ (per your request)
+  arrange(estimate__) |> 
+  # Create a local rank for the dodging order
+  mutate(dodge_rank = factor(row_number())) |> 
+  ungroup() |> 
+  ggplot() +
+  geom_pointrange(
+    aes(
+      x = landscape_type,
+      y = estimate__ * 10 + 50,
+      ymin = lower__ * 10 + 50,
+      ymax = upper__ * 10 + 50,
+      colour = school_context,
+      group = dodge_rank
+    ),
+    size = 0.25,
+    position = position_dodge(width = 0.8)
+  ) +
+  scale_colour_manual(values = school_colours) +
+  scale_y_continuous(breaks = seq(30, 60, 5)) +
+  facet_grid(cols = vars(response), labeller = label_wrap_gen(width = 15)) +
+  labs(
+    x = "Landscape type",
+    colour = "Schoolyard",
+    y = "KIDSCREEN-27 score +/- 95% CI"
+  )
+
+p_ks_sc_lt_school_effects
+saveRDS(
+  p_ks_sc_lt_school_effects,
+  file = file.path(data_objects_folder, "p_ks_sc_lt_school_effects.rds")
+)
+```
+
+
+We can calculate post-hoc comparison, stratified by landscape type to see if school types differ significantly within landscape types:
+
+```{r emmeans-sclt-ks}
+refgrid1 <- emmeans::ref_grid(
+  mv_adj_mi_ks,
+  at = list(
+    ses_mean = median(mv_adj_mi_ks$data$ses_mean, na.rm = TRUE),
+    landscape_type = c("low naturalness", "high naturalness"),
+    rep.meas = c("tscorephy", "tscorepwb", "tscorepar", "tscoresoc", "tscoresch")
+  )
+)
+
+emm <- emmeans::emmeans(
+  refgrid1,
+  specs = ~ school_context | ses_mean + rep.meas + landscape_type)
+
+contr <- emmeans::contrast(
+  emm,
+  method = "revpairwise",
+  # multiple by 10 (difference cancels out the offset of 50) to obtain original scale 
+  scale = 10
+  )
+
+pvals <- pd(contr) |>
+  mutate(p_value = pd_to_p(pd))
+
+confint(contr) |> 
+  as_tibble() |>
+  inner_join(pvals) |> 
+  kable(digits = 2)
+```
+
+Figure \@ref(fig:sei-sc-interaction-ks) shows the interaction between school-level SES, on the one hand, and Schoolyard or landscape type, on the other hand.
+
+(ref:sei-sc-interaction-ks) Predictions for the two-way interaction effects between school-level socio-economic index and Schoolyard, and school-level socio-economic index and landscape type, on physical well-being (backtransformed to original scale). The regression line depicts the median of the posterior distribution and the shaded areas correspond with 95% credible intervals.
+
+```{r sei-sc-interaction-ks, fig.height=120/25.4, out.width="120%", fig.cap="(ref:sei-sc-interaction-ks)"}
+preds <- conditional_effects(
+  mv_adj_mi_ks,
+  effects = "ses_mean:school_context",
+  resp = c("tscorephy", "tscorepwb", "tscorepar", "tscoresoc", "tscoresch")
+  )
+
+preds_df_ses_sc <- map2_dfr(
+  preds,
+  names(preds),
+  function(x, y) {
+    response <- stringr::str_extract(y, "^\\w*")
+    x$response <- response
+    x
+  }
+)
+
+# restrict to observed ranges of ses
+ses_ranges <- health_data |>
+  group_by(landscape_type, school_context) |>
+  summarise(
+    min_ses_mean = min(ses_mean, na.rm = TRUE),
+    max_ses_mean = max(ses_mean, na.rm = TRUE)
+) |>
+  ungroup()
+
+saveRDS(
+  ses_ranges,
+  file.path(data_objects_folder, "ses_ranges.rds")
+)
+
+preds_df_ses_sc <- preds_df_ses_sc |>
+  inner_join(ses_ranges) |>
+  filter(
+    ses_mean >= min_ses_mean,
+    ses_mean <= max_ses_mean
+  )
+  
+preds_df_ses_sc <- preds_df_ses_sc |>
+  mutate(
+    landscape_type = factor(
+      landscape_type,
+      levels = c("low naturalness", "high naturalness"),
+      labels = c("urban", "rural")
+    ),
+    school_context = factor(
+      school_context,
+      levels = c("low greenness", "high greenness"),
+      labels = c("non-green", "green")
+    ),
+    response = factor(
+      response,
+      levels = kidscreen_groups$level,
+      labels = kidscreen_groups$label
+    )
+  ) |>
+  as_tibble()
+
+p_ks_ses_sc <- preds_df_ses_sc |>
+  ggplot() +
+  geom_ribbon(
+    aes(
+      x = ses_mean,
+      y = estimate__ * 10 + 50,
+      ymin = lower__ * 10 + 50,
+      ymax = upper__ * 10 + 50,
+      fill = school_context
+    ),
+    alpha = 0.3
+  ) +
+  geom_line(
+    aes(
+      x = ses_mean,
+      y = estimate__ * 10 + 50,
+      colour = school_context
+    )) +
+  scale_y_continuous(breaks = seq(30, 60, 5)) +
+  scale_colour_manual(
+    values = school_colours) +
+  scale_fill_manual(
+    values = school_colours) +
+  facet_grid(cols = vars(response)) +
+  labs(
+    x = "School-level Socio-Economic Index",
+    colour = "Schoolyard",
+    fill = "Schoolyard",
+    y = "KIDSCREEN-27 score +/- 95% CI"
+  )
+
+preds <- conditional_effects(
+  mv_adj_mi_ks,
+  effects = "ses_mean:landscape_type",
+  resp = c("tscorephy", "tscorepwb", "tscorepar", "tscoresoc", "tscoresch")
+  )
+
+preds_df_ses_lt <- map2_dfr(
+  preds,
+  names(preds),
+  function(x, y) {
+    response <- stringr::str_extract(y, "^\\w*")
+    x$response <- response
+    x
+  }
+)
+
+preds_df_ses_lt <- preds_df_ses_lt |>
+  inner_join(ses_ranges) |>
+  filter(
+    ses_mean >= min_ses_mean,
+    ses_mean <= max_ses_mean
+  )
+  
+preds_df_ses_lt <- preds_df_ses_lt |>
+  mutate(
+    landscape_type = factor(
+      landscape_type,
+      levels = c("low naturalness", "high naturalness"),
+      labels = c("urban", "rural")
+    ),
+    school_context = factor(
+      school_context,
+      levels = c("low greenness", "high greenness"),
+      labels = c("non-green", "green")
+    ),
+    response = factor(
+      response,
+      levels = kidscreen_groups$level,
+      labels = kidscreen_groups$label
+    )
+  ) |>
+  as_tibble()
+
+landscape_colours <- c(rural = "cadetblue", urban = "sienna")
+
+p_ks_ses_lt <- preds_df_ses_lt |>
+  ggplot() +
+  geom_ribbon(
+    aes(
+      x = ses_mean,
+      y = estimate__ * 10 + 50,
+      ymin = lower__ * 10 + 50,
+      ymax = upper__ * 10 + 50,
+      fill = landscape_type
+    ),
+    alpha = 0.3
+  ) +
+  geom_line(
+    aes(
+      x = ses_mean,
+      y = estimate__ * 10 + 50,
+      colour = landscape_type
+    )) +
+  scale_y_continuous(breaks = seq(30, 60, 5)) +
+  scale_colour_manual(
+    values = landscape_colours) +
+  scale_fill_manual(
+    values = landscape_colours) +
+  facet_grid(cols = vars(response)) +
+  labs(
+    x = "School-level Socio-Economic Index",
+    colour = "Landscape type",
+    fill = "Landscape type",
+    y = "KIDSCREEN-27 score +/- 95% CI"
+  )
+
+p_ks_sc_lt / p_ks_ses_sc / p_ks_ses_lt +
+  plot_layout(guides = "collect", axes = "collect", axis_titles = "collect") +
+  plot_annotation(tag_levels = "a")
+
+saveRDS(
+  p_ks_ses_lt,
+  file.path(data_objects_folder, "p_ks_ses_lt.rds")
+)
+saveRDS(
+  p_ks_ses_sc,
+  file.path(data_objects_folder, "p_ks_ses_sc.rds")
+)
+```
+
+Alternative visualisation that better shows how the three two-way interactions combine:
+
+Figure \@ref(fig:sei-sc-interaction-ks-2) shows the two-way interactions between school-level SES, schoolyard and landscape type.
+
+(ref:sei-sc-interaction-ks-2) Predictions for the two-way interaction effects between school-level socio-economic index, Schoolyard and landscape type, on KIDSCREEN-27 outcomes (backtransformed to original scale). The regression line depicts the median of the posterior distribution and the shaded areas correspond with 95% credible intervals.
+
+```{r sei-sc-interaction-ks-2, fig.height=200/25.4, out.width="100%", fig.cap="(ref:sei-sc-interaction-ks-2)"}
+preds <- conditional_effects(
+  mv_adj_mi_ks,
+  effects = "ses_mean:school_context",
+  conditions = make_conditions(mv_adj_mi_ks, "landscape_type"),
+  resp = c("tscorephy", "tscorepwb", "tscorepar", "tscoresoc", "tscoresch")
+  )
+
+preds_df_ses_sc_lt <- map2_dfr(
+  preds,
+  names(preds),
+  function(x, y) {
+    response <- stringr::str_extract(y, "^\\w*")
+    x$response <- response
+    x
+  }
+)
+
+preds_df_ses_sc_lt <- preds_df_ses_sc_lt |>
+  inner_join(ses_ranges) |>
+  filter(
+    ses_mean >= min_ses_mean,
+    ses_mean <= max_ses_mean
+  ) |>
+  mutate(
+    landscape_type = factor(
+      landscape_type,
+      levels = c("low naturalness", "high naturalness"),
+      labels = c("urban", "rural")
+    ),
+    school_context = factor(
+      school_context,
+      levels = c("low greenness", "high greenness"),
+      labels = c("non-green", "green")
+    ),
+    response = factor(
+      response,
+      levels = kidscreen_groups$level,
+      labels = kidscreen_groups$label
+    )
+  ) |>
+  as_tibble()
+
+p_ks_ses_sc_lt <- preds_df_ses_sc_lt |>
+  ggplot() +
+  geom_ribbon(
+    aes(
+      x = ses_mean,
+      y = estimate__ * 10 + 50,
+      ymin = lower__ * 10 + 50,
+      ymax = upper__ * 10 + 50,
+      fill = school_context
+    ),
+    alpha = 0.3
+  ) +
+  geom_line(
+    aes(
+      x = ses_mean,
+      y = estimate__ * 10 + 50,
+      colour = school_context
+    )) +
+  scale_y_continuous(breaks = seq(30, 60, 5)) +
+  scale_colour_manual(
+    values = school_colours) +
+  scale_fill_manual(
+    values = school_colours) +
+  facet_grid(response ~ landscape_type) +
+  labs(
+    x = "School-level Socio-Economic Index",
+    colour = "Schoolyard",
+    fill = "Schoolyard",
+    y = "KIDSCREEN-27 score +/- 95% CI"
+  )
+
+p_ks_ses_sc_lt
+
+saveRDS(
+  p_ks_ses_sc_lt,
+  file.path(data_objects_folder, "p_ks_ses_sc_lt.rds")
+)
+
+```
+
+```{r}
+# Obtain slopes for each landscape, school 
+emt <- emmeans::emtrends(
+  mv_adj_mi_ks,
+  specs = c( "school_context", "landscape_type", "rep.meas"),
+  var = "ses_mean",
+  rep.meas = c("tscorephy", "tscorepwb", "tscorepar", "tscoresoc", "tscoresch")
+)
+
+pvals_emt <- pd(emt) |>
+  mutate(p_value = pd_to_p(pd))
+
+annot <- print(emt, export = TRUE)
+
+```
+
+Table \@ref(tab:slopes-2way) shows the corresponding slopes.
+
+(ref:slopes-2way) `r paste(annot$annotations, collapse = ". ")`. The slopes are scaled such that a 0.1 unit increase in SEI corresponds with an increase of the KIDSCREEN-27 score equal to the slope value. For instance, a 0.1 unit increase in SEI, increases the "At school" score by 3.00 [CI: 0.85 - 5.26] in non-green, urban schools.
+
+```{r slopes-2way}
+confint(emt) |> 
+  as_tibble() |>
+  inner_join(pvals_emt) |>
+  filter(grepl("^tscore", rep.meas)) |>
+  mutate(
+    landscape_type = factor(
+      landscape_type,
+      levels = c("low naturalness", "high naturalness"),
+      labels = c("urban", "rural")
+    ),
+    school_context = factor(
+      school_context,
+      levels = c("low greenness", "high greenness"),
+      labels = c("non-green", "green")
+    ),
+    response = factor(
+      rep.meas,
+      levels = kidscreen_groups$level,
+      labels = kidscreen_groups$label
+    )) |> 
+   select(-rep.meas) |> 
+    kable(digits = 2, caption = "(ref:slopes-2way)")
+```
+
+We can further calculate post-hoc differences at specific SEI values allowing to check the remediation effect.
+
+```{r}
+refgrid1 <- emmeans::ref_grid(
+  mv_adj_mi_ks,
+  at = list(
+    ses_mean = seq(0.4, 0.7, 0.1),
+    landscape_type = c("low naturalness", "high naturalness"),
+    rep.meas = c("tscorephy", "tscorepwb", "tscorepar", "tscoresoc", "tscoresch")
+  )
+)
+
+
+emm <- emmeans::emmeans(
+  refgrid1,
+  specs = ~ school_context | ses_mean + rep.meas + landscape_type)
+
+contr <- emmeans::contrast(
+  emm,
+  method = "revpairwise",
+  # differences multiply by 10 to have original scale (offset of 50 cancels)
+  scale = 10
+  )
+
+
+pvals <- pd(contr) |>
+  mutate(p_value = pd_to_p(pd))
+
+annot <- print(contr, export = TRUE)
+```
+
+Table \@ref(tab:emmeans-ses-phy) shows contrasts between green and non-green schoolyard for specified levels of SES and landscape type.
+
+(ref:emmeans-ses-phy) `r paste(annot$annotations, collapse = ". ")`. pd = probability of direction, p_value = 2 \* (1 - pd). The estimates show the difference between green and non-green schoolyards, e.g. in urban context, for a SEI of 0.4, children score 5.17 [CI: 0.20 - 10.43] points higher for physical well-being when schools have green schoolyards compared to non-green schoolyards. This significant effect disappears for higher SEI values in the urban context which is indicative of a remediating effect of green schoolyards partially offsetting negative effects of low SEI in urban settings.
+
+```{r emmeans-ses-phy}
+confint(contr) |> 
+  as_tibble() |>
+  inner_join(pvals) |> 
+    mutate(
+    landscape_type = factor(
+      landscape_type,
+      levels = c("low naturalness", "high naturalness"),
+      labels = c("urban", "rural")
+    ),
+    contrast = factor(
+      contrast,
+      levels = c("high greenness - low greenness"),
+      labels = c("green - non-green")
+    ),
+    response = factor(
+      rep.meas,
+      levels = kidscreen_groups$level,
+      labels = kidscreen_groups$label
+    )) |> 
+  select(-rep.meas) |> 
+  kable(digits = 2, caption = "(ref:emmeans-ses-phy)")
+```
+
+```{r conditional-effects-adjusters-ks}
+adjusters <- c(
+  "biological_sex",
+  "ses_centered",
+  "garden_score",
+  "natural_elements_score",
+  "nature_connectedness",
+  "mean_log_sirm")
+
+
+preds <- conditional_effects(
+  mv_adj_mi_ks,
+  effects = adjusters,
+  resp = c("tscorephy", "tscorepwb", "tscorepar", "tscoresoc", "tscoresch")
+)
+
+preds_df <- map2_dfr(
+  preds,
+  names(preds),
+  function(x, y) {
+    response <- stringr::str_extract(y, "^\\w*")
+    adjuster <- names(x)[1]
+    x$response <- response
+    x$effect1__ <- adjuster
+    x
+  }
+)
+
+preds_df <- preds_df |>
+  mutate(
+    response = factor(
+      response,
+      levels = kidscreen_groups$level,
+      labels = kidscreen_groups$label
+    )
+  ) |>
+  as_tibble()
+```
+
+```{r}
+p_ks_adjusters <- preds_df |>
+  select(-biological_sex, -landscape_type, -school_context) |>
+  pivot_longer(
+    cols = any_of(adjusters),
+    names_to = "variable",
+    values_to = "value"
+  ) |>
+  filter(
+    variable == effect1__
+  ) |>
+  mutate(effect1__ = gsub("_", " ",effect1__)) |>
+  ggplot() +
+  geom_ribbon(
+    aes(x = value,
+        y = estimate__ * 10 + 50,
+        ymin = lower__ * 10 + 50,
+        ymax = upper__ * 10 + 50),
+    alpha = 0.4
+    ) +
+  geom_line(
+    aes(
+      x = value,
+      y = estimate__ * 10 + 50
+    )
+  ) +
+  facet_grid(
+    response~stringr::str_wrap(effect1__, 15),
+    scales = "free") +
+  theme(
+    legend.position = "top",
+    legend.box = "vertical",
+    legend.margin = margin()
+  ) +
+  labs(y = "KIDSCREEN-27 score +/- 95% CI") 
+
+p_ks_adjusters
+saveRDS(
+  p_ks_adjusters,
+  file.path(data_objects_folder, "p_ks_adjusters.rds")
+)
+
+```
+
+```{r ks-biological-sex}
+p_ks_biological_sex <- preds_df |>
+  filter(effect1__ == "biological_sex") |>
+  ggplot() +
+  geom_pointrange(
+    aes(
+      x = response,
+      y = estimate__ * 10 + 50,
+      ymin = lower__ * 10 + 50,
+      ymax = upper__ * 10 + 50,
+      colour = biological_sex
+    ),
+    position = position_dodge(width = 0.2)
+  ) +
+  labs(y = "KIDSCREEN-27 score +/- 95% CI") +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0))
+
+p_ks_biological_sex
+saveRDS(
+  p_ks_biological_sex,
+  file.path(data_objects_folder, "p_ks_biological_sex.rds")
+)
+```
+
+
+## Wheezing, rhinitis, eczema (ISAAC survey data)
+
+
+```{r adj-mi-isaac-new}
+priors <- set_prior(
+  prior = "normal(0,1)", class = "b", 
+  resp = c(
+    "eczema01", "rhinitis01", "wheezing01",
+  "sesmean", "loginversesimpsonskin")
+) 
+
+rhs_isaac <- ~
+  #designvars
+  landscape_type +
+  school_context +
+  landscape_type:school_context +
+  mi(ses_mean) +
+  mi(ses_mean):school_context +
+  mi(ses_mean):landscape_type +
+  mi(log_inverse_simpson_skin) +
+  mi(log_inverse_simpson_skin):school_context +
+  mi(log_inverse_simpson_skin):landscape_type +
+  biological_sex +
+  f_allergies_family +
+  (1|q|school_id)
+
+bf_adj_mi_isaac_ses_skin <-
+  bf(
+    update(rhs_isaac, eczema_01 ~ .),
+    decomp = "QR",
+    family = bernoulli()
+  ) +
+  bf(
+    update(rhs_isaac, rhinitis_01 ~ . + mi(allergenic_potential)),
+    decomp = "QR",
+    family = bernoulli()
+  ) +
+  bf(
+    update(rhs_isaac, wheezing_01 ~ .  + mi(allergenic_potential)),
+    decomp = "QR",
+    family = bernoulli()
+  ) +
+  bf(
+    ses_mean | mi() + trunc(lb = 0, ub = 1) ~ school_context*landscape_type,
+    family = gaussian()
+  ) +
+  bf(
+    log_inverse_simpson_skin | mi() ~ school_context*landscape_type,
+    family = gaussian()
+  ) +
+  bf(
+    allergenic_potential | mi() + trunc(lb = 0) ~ school_context*landscape_type,
+    family = gaussian()
+  ) +
+  set_rescor(FALSE)
+
+mv_adj_mi_isaac_ses_skin <- brm(
+    formula = bf_adj_mi_isaac_ses_skin,
+    data = health_data,
+    prior = priors,
+    cores = 4,
+    silent = 2,
+    refresh = 0,
+    chains = 4,
+    backend = "cmdstanr",
+    normalize = FALSE,
+    file_refit = "on_change",
+    file = file.path(
+      model_folder,
+      "mv_adj_mi_isaac_ses_skin")
+)
+```
+
+```{r summary-isaac-new}
+pvals <- pd(mv_adj_mi_isaac_ses_skin) |>
+  as_tibble() |>
+  separate_wider_delim(
+    Parameter,
+    delim = "_",
+    too_many = "merge",
+    names = c("dropme", "response", "parameter")) |>
+  select(-dropme) |>
+  mutate(p_value = pd_to_p(pd)) |>
+  select(-Effects, -Component)
+
+gather_draws(
+  mv_adj_mi_isaac_ses_skin,
+  `b_(ecz|rhi|whe).*|bsp_(ecz|rhi|whe).*`,
+  regex = TRUE
+) |>
+  separate_wider_delim(
+    .variable,
+    delim = "_",
+    too_many = "merge",
+    names = c("dropme", "response", "parameter")) |>
+  select(-dropme) |>
+  group_by(response, parameter) |>
+  summarise_draws() |>
+  inner_join(pvals) |>
+  relocate(p_value, .before = rhat) |>
+  select(-variable, -rhat, -ess_bulk, -ess_tail) |>
+  mutate(
+    estimate = sprintf(
+      "%.2f [%.2f - %.2f]",
+      median,
+      q5,
+      q95
+    )
+  ) |> 
+  select(response, parameter, estimate, p_value) |>
+  kable(digits = 2)
+```
+
+\@ref(fig:mcmc-intervals-isaac-new)
+
+(ref:mcmc-intervals-isaac-new) Parameter estimates for the effects on eczema, rhinitis and wheezing (binary outcomes). Point estimates represent the median of the posterior distribution. Thick and thin lines show 50% and 90% inner probability mass of the posterior distribution. For the all data model, effects are with reference to urban landscape type, boys and non-green schoolyards. For the rural and uban subsets, effects are with reference to boys and non-green schoolyards.
+
+```{r mcmc-intervals-isaac-new, fig.height = 200/25.4, out.width="120%", fig.cap="(ref:mcmc-intervals-isaac-new)"}
+isaac_alldata <- mcmc_intervals_data(
+  mv_adj_mi_isaac_ses_skin,
+  regex_pars = "^(b|bsp)_(eczema01|rhinitis01|wheezing01)",
+  prob = 0.5, # inner interval probability mass
+  prob_outer = 0.9, # outer interval probability mass
+  point_est = "median"
+) |> 
+  mutate(
+    dataset = "all data"
+  )
+
+isaac_alldata <- isaac_alldata |> 
+  mutate(
+    response = stringr::str_extract(string = parameter, "^(b|bsp)_(.+)01_", group = 2),
+    parameter = gsub("^(b|bsp)_(.+)01_", "", parameter),
+    parameter = gsub("landscape_typehighnaturalness", "Rural", parameter),
+    parameter = gsub("school_contexthighgreenness", "Green schoolyard", parameter),
+    parameter = gsub("biological_sexFemale", "Biological sex - girl", parameter),
+    parameter = gsub("natural_elements_score", "Natural elements score", parameter),
+    parameter = gsub("mises_centered", "Deviation school SES", parameter),
+    parameter = gsub("mises_mean", "Mean school SES", parameter),
+    parameter = gsub("migarden_score", "Garden score", parameter),
+    parameter = gsub("mimean_log_sirm", "Local air pollution", parameter),
+    parameter = gsub("minature_connectedness", "Nature connectedness", parameter),
+    parameter = gsub("milog_inverse_simpson_skin", "Diversity skin microbiome", parameter),
+    parameter = gsub("misum_contact_animals", "Contact animals", parameter),
+    parameter = gsub("f_allergies_familyyes", "Allergies family - yes", parameter),
+    parameter = gsub("f_allergies_familyunknown", "Allergies family - unknown", parameter),
+    parameter = gsub("miallergenic_potential", "Allergenic potential", parameter),
+    parameter = gsub("milog_invsimpson_plant", "Diversity plant microbiome", parameter),
+    parameter = gsub("milog_invsimpson_dust", "Diversity dust microbiome", parameter),
+    parameter = gsub("milog_invsimpson_soil", "Diversity soil microbiome", parameter),
+    parameter = reorder(parameter, m)
+  )
+
+mcmc_intervals_isaac <- isaac_alldata |>
+  filter(
+    parameter != "Intercept"
+  ) |> 
+  ggplot() +
+  geom_vline(xintercept = 0, alpha = 0.5) +
+  geom_linerange(
+    aes(
+      x = m,
+      xmin = ll,
+      xmax = hh,
+      y = parameter
+    ),
+    linewidth = 1, alpha = 0.5, position = position_dodge(width = 0.5)
+  ) +
+  geom_linerange(
+    aes(
+      x = m,
+      xmin = l,
+      xmax = h,
+      y = parameter
+    ),
+    linewidth = 2, alpha = 0.5, position = position_dodge(width = 0.5)
+  ) +
+  geom_point(
+    aes(
+      x = m,
+      y = parameter
+    ),
+    size = 3, alpha = 0.5, position = position_dodge(width = 0.5)
+  ) +
+  facet_wrap(~ response, scales = "free_x") +
+  labs(
+    x = "Parameter estimates"
+  ) +
+  theme(
+    legend.position = "top",
+    axis.title.y = element_blank()
+  )
+
+mcmc_intervals_isaac
+saveRDS(
+  mcmc_intervals_isaac,
+  file.path(data_objects_folder, "mcmc_intervals_isaac.rds")
+)
+```
+
+Posterior predictive checks:
+
+```{r ppcheck-isaac-new}
+responses <- mv_adj_mi_isaac_ses_skin$formula$responses
+checks <- vector("list", length(responses))
+for (i in seq_along(responses)) {
+  checks[[i]] <- pp_check(
+    mv_adj_mi_isaac_ses_skin,
+    resp = responses[i],
+    ndraws = 50) + labs(x = responses[i])
+}
+checks |>
+  wrap_plots()
+```
+
+```{r adj-mi-isaac-preds-sclt-new}
+preds <- conditional_effects(
+  mv_adj_mi_isaac_ses_skin,
+  effects = "landscape_type:school_context",
+  resp = c("eczema01", "rhinitis01", "wheezing01")
+  )
+
+preds_df <- map2_dfr(
+  preds,
+  names(preds),
+  function(x, y) {
+    response <- stringr::str_extract(y, "^\\w*")
+    x$response <- response
+    x
+  }
+)
+
+preds_df <- preds_df |>
+  mutate(
+    landscape_type = factor(
+      landscape_type,
+      levels = c("low naturalness", "high naturalness"),
+      labels = c("urban", "rural")
+    ),
+    school_context = factor(
+      school_context,
+      levels = c("low greenness", "high greenness"),
+      labels = c("non-green", "green")
+    ),
+    response = factor(
+      response,
+      levels = c("rhinitis01", "wheezing01", "eczema01"),
+      labels = c("rhinitis", "wheezing", "eczema")
+    )
+  ) |>
+  as_tibble()
+
+p_isaac_ltsc <- preds_df |>
+  ggplot() +
+  geom_pointrange(
+    aes(
+      x = landscape_type,
+      y = estimate__,
+      ymin = lower__,
+      ymax = upper__,
+      colour = school_context
+    ),
+    position = position_dodge(width = 0.5)
+  ) +
+  scale_colour_manual(values = school_colours) +
+  facet_wrap(~ response) +
+  labs(
+    x = "Landscape type",
+    colour = "Schoolyard",
+    y = "Percentage of sensitized children\n(+/- 95% CI)"
+  ) +
+  scale_y_continuous(labels = scales::percent)
+
+p_isaac_ltsc
+
+saveRDS(
+  p_isaac_ltsc,
+  file.path(data_objects_folder, "p_isaac_ltsc.rds")
+)
+```
+
+```{r adj-mi-isaac-preds-sclt-school-effects}
+preds <- conditional_effects(
+  mv_adj_mi_isaac_ses_skin,
+  effects = "school_id",
+  conditions = make_conditions(
+    mv_adj_mi_isaac_ses_skin, vars = c("landscape_type", "school_context")
+  ),
+  resp = c("eczema01", "rhinitis01", "wheezing01"),
+  re_formula = NULL
+  )
+
+preds_df <- map2_dfr(
+  preds,
+  names(preds),
+  function(x, y) {
+    response <- stringr::str_extract(y, "^\\w*")
+    x$response <- response
+    x
+  }
+)
+
+# filter out the actual types to which a school belongs
+school_cats <- health_data |>
+  distinct(school_id, landscape_type, school_context)
+preds_df <- preds_df |>
+  semi_join(
+    school_cats,
+    by = join_by(school_id, landscape_type, school_context)
+  )
+
+
+preds_df <- preds_df |>
+  mutate(
+    landscape_type = factor(
+      landscape_type,
+      levels = c("low naturalness", "high naturalness"),
+      labels = c("urban", "rural")
+    ),
+    school_context = factor(
+      school_context,
+      levels = c("low greenness", "high greenness"),
+      labels = c("non-green", "green")
+    ),
+    response = factor(
+      response,
+      levels = c("rhinitis01", "wheezing01", "eczema01"),
+      labels = c("rhinitis", "wheezing", "eczema")
+    )
+  ) |>
+  as_tibble()
+
+p_isaac_ltsc_schooleffects <- preds_df |>
+  # Group by the facet and x-axis variable
+  group_by(response, landscape_type) |> 
+  # Sort ascending by estimate__ (per your request)
+  arrange(desc(estimate__)) |> 
+  # Create a local rank for the dodging order
+  mutate(dodge_rank = factor(row_number())) |> 
+  ungroup() |> 
+  ggplot() +
+  geom_pointrange(
+    aes(
+      x = landscape_type,
+      y = estimate__,
+      ymin = lower__,
+      ymax = upper__,
+      colour = school_context,
+      # Map the group aesthetic to the local rank
+      group = dodge_rank 
+    ),
+    size = 0.25,
+    position = position_dodge(width = 0.8)
+  ) +
+  scale_colour_manual(values = school_colours) +
+  facet_wrap(~ response) +
+  labs(
+    x = "Landscape type",
+    colour = "Schoolyard",
+    y = "Percentage of sensitized children\n(+/- 95% CI)"
+  ) +
+  scale_y_continuous(labels = scales::percent)
+
+p_isaac_ltsc_schooleffects
+
+saveRDS(
+  p_isaac_ltsc_schooleffects,
+  file.path(data_objects_folder, "p_isaac_ltsc_schooleffects.rds")
+)
+```
+
+
+
+We can calculate post-hoc comparison, stratified by landscape type to see if school types differ significantly within landscape types:
+
+```{r emmeans-sclt-isaac-new}
+ses_ranges_landscape <- ses_ranges |>
+  group_by(landscape_type) |>
+  summarise(
+    min_overlap_ses_mean = max(min_ses_mean),
+    max_overlap_ses_mean = min(max_ses_mean)
+  )
+#brms' emmeans support for multivariate models is limited to cases where all univariate models have the same family.
+# instead calc manually
+nd <- expand.grid(
+  school_context = c("low greenness", "high greenness"),
+  ses_mean = median(mv_adj_mi_isaac_ses_skin$data$ses_mean, na.rm = TRUE),
+  landscape_type = c("low naturalness", "high naturalness")
+) |>
+  mutate(
+    biological_sex = "Male",
+    f_allergies_family = "no",
+    ses_centered = 0,
+    garden_score = mean(health_data$garden_score, na.rm = TRUE) |> round(2),
+    natural_elements_score = mean(health_data$natural_elements_score) |>
+      round(2),
+    nature_connectedness =
+      mean(health_data$nature_connectedness, na.rm = TRUE)|> round(2),
+    mean_log_sirm = mean(health_data$mean_log_sirm, na.rm = TRUE)|> round(2),
+    log_invsimpson_plant = mean(health_data$log_invsimpson_plant, na.rm = TRUE),
+    log_invsimpson_dust = mean(health_data$log_invsimpson_dust, na.rm = TRUE),
+    log_invsimpson_soil = mean(health_data$log_invsimpson_soil, na.rm = TRUE),
+    log_inverse_simpson_skin = mean(health_data$log_inverse_simpson_skin, na.rm = TRUE),
+    sum_contact_animals = mean(health_data$sum_contact_animals, na.rm = TRUE) |>
+      round(2),
+    allergenic_potential = mean(
+      health_data$allergenic_potential, na.rm = TRUE
+    ) |>
+      round(2)
+  ) |>
+  inner_join(ses_ranges_landscape) |>
+  filter(
+    ses_mean >= min_overlap_ses_mean,
+    ses_mean <= max_overlap_ses_mean
+  )
+
+# linear predictor link scale (logit)
+pe <- tidybayes::add_linpred_rvars(
+  object = mv_adj_mi_isaac_ses_skin,
+  re_formula = NA,
+  newdata = nd,
+  prob = 0.95,
+  robust = TRUE,
+  transform = FALSE,
+  resp = c("rhinitis01", "wheezing01", "eczema01")
+)
+
+# calculate risk ratio
+pe <- pe |>
+  mutate(
+    school_context = factor(
+      school_context,
+      levels = c("low greenness", "high greenness"),
+      labels = c("non-green", "green") 
+    ),
+    landscape_type = factor(
+      landscape_type,
+      levels = c("low naturalness", "high naturalness"),
+      labels = c("urban", "rural")
+    )
+  ) |>
+  select(
+    landscape_type, school_context, .linpred
+  ) |> 
+  summarise(
+    across(
+      starts_with(".linpred"),
+      \(x) exp(last(x) - first(x)),
+      .names = "riskratio"
+    ),
+    contrast = paste(last(school_context), " / ", first(school_context)),
+    .by = c(landscape_type)
+  )
+
+pe |> 
+  select(landscape_type, contrast, riskratio) |>
+   mutate(
+    rr_eczema = c(riskratio[, "eczema01"]),
+    rr_rhinitis = c(riskratio[, "rhinitis01"]),
+    rr_wheezing = c(riskratio[, "wheezing01"])
+  ) |>
+  select(-riskratio) |> 
+  pivot_longer(
+    cols = starts_with("rr_"),
+    names_to = "response",
+    names_prefix = "rr_",
+    values_to = "riskratio"
+  ) |>
+  mutate(
+    pd = pmax(sum(riskratio > 1), sum(riskratio < 1)) / sum(riskratio > -Inf),
+    p_value_one_sided = pd_to_p(pd, direction = "one-sided"),
+    p_value_two_sided = pd_to_p(pd, direction = "two-sided"),
+    riskratio = sprintf(
+      "%.2f [%.2f - %.2f]",
+      median(riskratio),
+      quantile2(riskratio, 0.025),
+      quantile2(riskratio, 0.975)
+    )
+  ) |> 
+  select(-pd) |> 
+  mutate(
+    response = factor(response, levels = c("rhinitis", "wheezing", "eczema"))
+  ) |>
+  arrange(response) |> 
+  kable(digits = 2)
+
+```
+
+Figure \@ref(fig:sei-sc-interaction-isaac-new) shows the two-way interactions between school context and landscape type and between school-level SES, on the one hand, and school context or landscape type, on the other hand.
+
+(ref:sei-sc-interaction-isaac) Two-way interaction conditional effects between school context and landscape type, school-level socio-economic index and school context, school-level socio-economic index and landscape type, on eczema, rhinitis and wheezing (backtransformed to original scale). The median of the posterior distribution and 95% credible intervals are shown.
+
+```{r sei-sc-interaction-isaac-new, fig.height=200/25.4, out.width="120%", fig.cap="(ref:sei-sc-interaction-isaac-new)"}
+preds <- conditional_effects(
+  mv_adj_mi_isaac_ses_skin,
+  effects = "ses_mean:school_context",
+  resp = c("eczema01", "rhinitis01", "wheezing01")
+  )
+
+preds_df_ses_sc <- map2_dfr(
+  preds,
+  names(preds),
+  function(x, y) {
+    response <- stringr::str_extract(y, "^\\w*")
+    x$response <- response
+    x
+  }
+)
+
+preds_df_ses_sc <- preds_df_ses_sc |>
+  inner_join(ses_ranges) |>
+  filter(
+    ses_mean >= min_ses_mean,
+    ses_mean <= max_ses_mean
+  )
+  
+preds_df_ses_sc <- preds_df_ses_sc |>
+  mutate(
+    landscape_type = factor(
+      landscape_type,
+      levels = c("low naturalness", "high naturalness"),
+      labels = c("urban", "rural")
+    ),
+    school_context = factor(
+      school_context,
+      levels = c("low greenness", "high greenness"),
+      labels = c("non-green", "green")
+    ),
+    response = factor(
+      response,
+      levels = c("rhinitis01", "wheezing01", "eczema01"),
+      labels = c("rhinitis", "wheezing", "eczema")
+    )
+  ) |>
+  as_tibble()
+
+p_isaac_ses_sc <- preds_df_ses_sc |>
+  ggplot() +
+  geom_ribbon(
+    aes(
+      x = ses_mean,
+      y = estimate__,
+      ymin = lower__,
+      ymax = upper__,
+      fill = school_context
+    ),
+    alpha = 0.3
+  ) +
+  geom_line(
+    aes(
+      x = ses_mean,
+      y = estimate__,
+      colour = school_context
+    )) +
+  facet_wrap(~response) +
+  scale_y_continuous(limits = c(0, NA), labels = scales::percent) +
+  scale_colour_manual(
+    values = school_colours) +
+  scale_fill_manual(
+    values = school_colours) +
+  labs(
+    x = "School-level Socio-Economic Index",
+    colour = "School context",
+    fill = "School context",
+    y = "Percentage of children sensitized (+/- 95% CI)"
+  )
+
+preds <- conditional_effects(
+  mv_adj_mi_isaac_ses_skin,
+  effects = "ses_mean:landscape_type",
+  resp = c("eczema01", "rhinitis01", "wheezing01")
+  )
+
+preds_df_ses_lt <- map2_dfr(
+  preds,
+  names(preds),
+  function(x, y) {
+    response <- stringr::str_extract(y, "^\\w*")
+    x$response <- response
+    x
+  }
+)
+
+preds_df_ses_lt <- preds_df_ses_lt |>
+  inner_join(ses_ranges) |>
+  filter(
+    ses_mean >= min_ses_mean,
+    ses_mean <= max_ses_mean
+  )
+  
+preds_df_ses_lt <- preds_df_ses_lt |>
+  mutate(
+    landscape_type = factor(
+      landscape_type,
+      levels = c("low naturalness", "high naturalness"),
+      labels = c("urban", "rural")
+    ),
+    school_context = factor(
+      school_context,
+      levels = c("low greenness", "high greenness"),
+      labels = c("non-green", "green")
+    ),
+    response = factor(
+      response,
+      levels = c("rhinitis01", "wheezing01", "eczema01"),
+      labels = c("rhinitis", "wheezing", "eczema")
+    )
+  ) |>
+  as_tibble()
+
+p_isaac_ses_lt <- preds_df_ses_lt |>
+  ggplot() +
+  geom_ribbon(
+    aes(
+      x = ses_mean,
+      y = estimate__,
+      ymin = lower__,
+      ymax = upper__,
+      fill = landscape_type
+    ),
+    alpha = 0.3
+  ) +
+  geom_line(
+    aes(
+      x = ses_mean,
+      y = estimate__,
+      colour = landscape_type
+    )) +
+  facet_wrap(~response) +
+  scale_y_continuous(limits = c(0, NA), labels = scales::percent) +
+  scale_colour_manual(
+    values = landscape_colours) +
+  scale_fill_manual(
+    values = landscape_colours) +
+  labs(
+    x = "School-level Socio-Economic Index",
+    colour = "Landscape type",
+    fill = "Landscape type",
+    y = "Percentage of children sensitized (+/- 95% CI)"
+  )
+
+p_isaac_ltsc / p_isaac_ses_sc / p_isaac_ses_lt +
+  plot_layout(guides = "collect", axes = "collect") +
+  plot_annotation(tag_levels = "a")
+
+saveRDS(
+  p_isaac_ses_sc,
+  file.path(data_objects_folder, "p_isaac_ses_sc.rds")
+)
+saveRDS(
+  p_isaac_ses_lt,
+  file.path(data_objects_folder, "p_isaac_ses_lt.rds")
+)
+```
+
+Alternative visualisation that better shows how the three two-way interactions combine:
+
+```{r isaac-sei-lt-sc-new, fig.height = 160/25.4, out.width="100%"}
+preds <- conditional_effects(
+  mv_adj_mi_isaac_ses_skin,
+  effects = "ses_mean:school_context",
+  conditions = make_conditions(mv_adj_mi_isaac_ses_skin, "landscape_type"),
+  resp = c("eczema01", "rhinitis01", "wheezing01")
+  )
+
+preds_df_ses_sc_lt <- map2_dfr(
+  preds,
+  names(preds),
+  function(x, y) {
+    response <- stringr::str_extract(y, "^\\w*")
+    x$response <- response
+    x
+  }
+)
+
+preds_df_ses_sc_lt <- preds_df_ses_sc_lt |>
+  inner_join(ses_ranges) |>
+  filter(
+    ses_mean >= min_ses_mean,
+    ses_mean <= max_ses_mean
+  ) |>
+  mutate(
+    landscape_type = factor(
+      landscape_type,
+      levels = c("low naturalness", "high naturalness"),
+      labels = c("urban", "rural")
+    ),
+    school_context = factor(
+      school_context,
+      levels = c("low greenness", "high greenness"),
+      labels = c("non-green", "green")
+    ),
+    response = factor(
+      response,
+      levels = c("rhinitis01", "wheezing01", "eczema01"),
+      labels = c("rhinitis", "wheezing", "eczema")
+    )
+  ) |>
+  as_tibble()
+
+p_isaac_ses_sc_lt <- preds_df_ses_sc_lt |>
+  ggplot() +
+  geom_ribbon(
+    aes(
+      x = ses_mean,
+      y = estimate__,
+      ymin = lower__,
+      ymax = upper__,
+      fill = school_context
+    ),
+    alpha = 0.3
+  ) +
+  geom_line(
+    aes(
+      x = ses_mean,
+      y = estimate__,
+      colour = school_context
+    )) +
+  scale_y_continuous(limits = c(0, 1), labels = scales::percent) +
+  scale_colour_manual(
+    values = school_colours) +
+  scale_fill_manual(
+    values = school_colours) +
+  facet_grid(response ~ landscape_type) +
+  labs(
+    x = "School-level Socio-Economic Index",
+    colour = "School context",
+    fill = "Schoolyard",
+    y = "Percentage of children sensitized (+/- 95% CI)"
+  )
+
+p_isaac_ses_sc_lt
+
+saveRDS(
+  p_isaac_ses_sc_lt,
+  file.path(data_objects_folder, "p_isaac_ses_sc_lt.rds")
+)
+```
+
+The corresponding slopes are:
+
+```{r isaac-slopes-2way-new}
+# Obtain slopes for each landscape, school 
+drw <- as_draws_rvars(mv_adj_mi_isaac_ses_skin)
+slope_drw <- expand_grid(
+  response = c("eczema", "rhinitis", "wheezing"),
+  landscape_type = c("urban", "rural"),
+  school_context = c("non-green", "green")
+) |> 
+  mutate(
+    slope = case_when(
+      landscape_type == "rural" & school_context == "green" & response == "eczema" ~
+        drw$bsp_eczema01_mises_mean 
+      + drw$`bsp_eczema01_mises_mean:landscape_typehighnaturalness`
+      + drw$`bsp_eczema01_mises_mean:school_contexthighgreenness`,
+      landscape_type == "rural" & school_context == "green" & response == "rhinitis" ~
+        drw$bsp_rhinitis01_mises_mean 
+      + drw$`bsp_rhinitis01_mises_mean:landscape_typehighnaturalness`
+      + drw$`bsp_rhinitis01_mises_mean:school_contexthighgreenness`,
+      landscape_type == "rural" & school_context == "green" & response == "wheezing" ~
+        drw$bsp_wheezing01_mises_mean 
+      + drw$`bsp_wheezing01_mises_mean:landscape_typehighnaturalness`
+      + drw$`bsp_wheezing01_mises_mean:school_contexthighgreenness`,
+      landscape_type == "rural" & school_context == "non-green" & response == "eczema" ~
+        drw$bsp_eczema01_mises_mean 
+      + drw$`bsp_eczema01_mises_mean:landscape_typehighnaturalness`,
+      landscape_type == "rural" & school_context == "non-green" & response == "rhinitis" ~
+        drw$bsp_rhinitis01_mises_mean 
+      + drw$`bsp_rhinitis01_mises_mean:landscape_typehighnaturalness`,
+      landscape_type == "rural" & school_context == "non-green" & response == "wheezing" ~
+        drw$bsp_wheezing01_mises_mean 
+      + drw$`bsp_wheezing01_mises_mean:landscape_typehighnaturalness`,
+      landscape_type == "urban" & school_context == "green" & response == "eczema" ~
+        drw$bsp_eczema01_mises_mean 
+      + drw$`bsp_eczema01_mises_mean:school_contexthighgreenness`,
+      landscape_type == "urban" & school_context == "green" & response == "rhinitis" ~
+        drw$bsp_rhinitis01_mises_mean 
+      + drw$`bsp_rhinitis01_mises_mean:school_contexthighgreenness`,
+      landscape_type == "urban" & school_context == "green" & response == "wheezing" ~
+        drw$bsp_wheezing01_mises_mean 
+      + drw$`bsp_wheezing01_mises_mean:landscape_typehighnaturalness`
+      + drw$`bsp_wheezing01_mises_mean:school_contexthighgreenness`,
+      landscape_type == "urban" & school_context == "non-green" & response == "eczema" ~
+        drw$bsp_eczema01_mises_mean,
+      landscape_type == "urban" & school_context == "non-green" & response == "rhinitis" ~
+        drw$bsp_rhinitis01_mises_mean,
+      landscape_type == "urban" & school_context == "non-green" & response == "wheezing" ~
+        drw$bsp_wheezing01_mises_mean
+    )
+  ) |> 
+  rowwise() |> 
+  mutate(
+    median = median(slope),
+    lower2.5 = quantile(slope, probs = 0.025),
+    upper97.5 = quantile(slope, probs = 0.975),
+    pd = pmax(
+      sum(slope > 0),
+      sum(slope < 0)
+      ) / sum(slope > -Inf),
+    p_value = pd_to_p(pd)
+  )
+
+slope_drw |> 
+  mutate(
+    slope = sprintf(
+      "%.2f [%.2f - %.2f]",
+      median,
+      lower2.5,
+      upper97.5
+    ),
+    response = factor(response, levels = c("rhinitis", "wheezing", "eczema"))
+  ) |> 
+  select(response, landscape_type, school_context, slope, p_value) |> 
+  arrange(response) |> 
+  kable(digits = 2)
+```
+
+```{r contrasts-remediation-isaac-new}
+ses_ranges_landscape <- ses_ranges |>
+  group_by(landscape_type) |>
+  summarise(
+    min_overlap_ses_mean = max(min_ses_mean),
+    max_overlap_ses_mean = min(max_ses_mean)
+  )
+
+
+# semi-manual check if emmeans (next chunk) does what it needs to do
+nd <- expand.grid(
+  school_context = c("low greenness", "high greenness"),
+  ses_mean = seq(0.4, 0.8, 0.02),
+  landscape_type = c("low naturalness", "high naturalness")
+) |>
+  mutate(
+    biological_sex = "Male",
+    f_allergies_family = "no",
+    ses_centered = 0,
+    garden_score = mean(health_data$garden_score, na.rm = TRUE) |> round(2),
+    natural_elements_score = mean(health_data$natural_elements_score) |> round(2),
+    nature_connectedness =
+      mean(health_data$nature_connectedness, na.rm = TRUE) |> round(2),
+    mean_log_sirm = mean(health_data$mean_log_sirm, na.rm = TRUE) |> round(2),
+    log_invsimpson_plant = mean(health_data$log_invsimpson_plant, na.rm = TRUE),
+    log_invsimpson_dust = mean(health_data$log_invsimpson_dust, na.rm = TRUE),
+    log_invsimpson_soil = mean(health_data$log_invsimpson_soil, na.rm = TRUE),
+    log_inverse_simpson_skin = mean(health_data$log_inverse_simpson_skin, na.rm = TRUE),
+    sum_contact_animals = mean(health_data$sum_contact_animals, na.rm = TRUE) |>
+      round(2),
+    allergenic_potential = mean(health_data$allergenic_potential, na.rm = TRUE) |> round(2)
+  ) |>
+  inner_join(ses_ranges_landscape) |>
+  filter(
+    ses_mean >= min_overlap_ses_mean,
+    ses_mean <= max_overlap_ses_mean
+  )
+
+# linear predictor link scale (logit)
+pe <- tidybayes::add_linpred_rvars(
+  object = mv_adj_mi_isaac_ses_skin,
+  re_formula = NA,
+  newdata = nd,
+  prob = 0.95,
+  robust = TRUE,
+  transform = FALSE,
+  resp = c("eczema01", "rhinitis01", "wheezing01")
+)
+
+# calculate logit difference and take exp which returns odds-ratio
+rvar_plogis <- posterior::rfun(plogis)
+pe <- pe |>
+  summarise(
+    across(
+      starts_with(".linpred"),
+      \(x) exp(last(x) - first(x)),
+      .names = "oddsratio"
+    ),
+    across(
+      starts_with(".linpred"),
+      \(x) rvar_plogis(last(x)) - rvar_plogis(first(x)),
+      .names = "probability_difference"
+    ),
+    contrast = paste(last(school_context), " - ", first(school_context)),
+    .by = c(ses_mean, landscape_type, biological_sex, ses_centered,
+            garden_score, natural_elements_score, nature_connectedness,
+            mean_log_sirm, log_invsimpson_plant,
+            log_invsimpson_dust,
+            log_invsimpson_soil,
+            log_inverse_simpson_skin,
+            sum_contact_animals,
+            f_allergies_family,
+            allergenic_potential)
+  )
+
+pe_pvals <- 
+  pe |> 
+  select(landscape_type, contrast, ses_mean,
+         starts_with("oddsratio")) |> 
+  mutate(
+    pd = pmax(
+      sum(oddsratio > 1),
+      sum(oddsratio < 1)
+      ) / sum(oddsratio > -Inf),
+    p_eczema = pd_to_p(pd)
+  )
+
+pe <- pe |>
+  unnest_rvars() |>
+  pivot_longer(
+    cols = starts_with("oddsratio"),
+    names_to = "allergy",
+    names_pattern = "([a-z]*01)",
+    values_to = "oddsratio"
+  ) |>
+  mutate(
+    allergy = factor(
+      allergy,
+      levels = c("rhinitis01", "wheezing01", "eczema01"),
+      labels = c("rhinitis", "wheezing", "eczema")
+    ),
+    landscape_type = factor(
+      landscape_type,
+      levels = c("low naturalness", "high naturalness"),
+      labels = c("urban", "rural")
+    )
+  ) 
+
+pe |>
+  ggplot() +
+  geom_hline(yintercept = 0) +
+  stat_lineribbon(
+    aes(
+      x = ses_mean,
+      y = oddsratio),
+    alpha = 0.4
+  ) +
+  geom_hline(yintercept = 1) +
+  scale_y_continuous(
+    transform = scales::log10_trans(),
+    breaks = c(1/100, 1/10, 1, 10, 100)
+  ) +
+  facet_grid(allergy ~ landscape_type, scales = "free_y") +
+  labs(y = "Odds-ratio\n(green/non-green)",
+       x = "Mean Socio-Economic Status")
+```
+
+```{r isaac-diversity-lt-new}
+diversity_ranges <- health_data |>
+  group_by(landscape_type) |>
+  reframe(
+    across(contains("simpson"), \(x) range(x, na.rm = TRUE))
+  )
+
+preds <- conditional_effects(
+  mv_adj_mi_isaac_ses_skin,
+  effects = "log_inverse_simpson_skin:school_context",
+  conditions = make_conditions(mv_adj_mi_isaac_ses_skin, "landscape_type"),
+  resp = c("eczema01", "rhinitis01", "wheezing01")
+  )
+
+preds_df_skindiv_sc_lt <- map2_dfr(
+  preds,
+  names(preds),
+  function(x, y) {
+    response <- stringr::str_extract(y, "^\\w*")
+    x$response <- response
+    x
+  }
+)
+
+preds_df_skindiv_sc_lt <- preds_df_skindiv_sc_lt |>
+  mutate(
+    landscape_type = factor(
+      landscape_type,
+      levels = c("low naturalness", "high naturalness"),
+      labels = c("urban", "rural")
+    ),
+    school_context = factor(
+      school_context,
+      levels = c("low greenness", "high greenness"),
+      labels = c("non-green", "green")
+    ),
+    response = factor(
+      response,
+      levels = c("rhinitis01", "wheezing01", "eczema01"),
+      labels = c("rhinitis", "wheezing", "eczema")
+    )
+  ) |>
+  as_tibble()
+
+p_isaac_skindiv_sc_lt <- preds_df_skindiv_sc_lt |>
+  ggplot() +
+  geom_ribbon(
+    aes(
+      x = exp(log_inverse_simpson_skin),
+      y = estimate__,
+      ymin = lower__,
+      ymax = upper__,
+      fill = school_context
+    ),
+    alpha = 0.3
+  ) +
+  geom_line(
+    aes(
+      x = exp(log_inverse_simpson_skin),
+      y = estimate__,
+      colour = school_context
+    )) +
+  scale_y_continuous(limits = c(0, 1), labels = scales::percent) +
+  scale_colour_manual(
+    values = school_colours) +
+  scale_fill_manual(
+    values = school_colours) +
+  facet_grid(response ~ landscape_type) +
+  labs(
+    x = "Skin microbial diversity",
+    colour = "Schoolyard",
+    fill = "Schoolyard",
+    y = "Percentage of children sensitized (+/- 95% CI)"
+  ) +
+  scale_x_log10()
+
+p_isaac_skindiv_sc_lt
+
+saveRDS(
+  p_isaac_skindiv_sc_lt,
+  file.path(data_objects_folder, "p_isaac_skindiv_sc_lt.rds")
+)
+```
+
+```{r calc-isaac-diversity-slopes-new}
+# Obtain slopes for each landscape, school 
+drw <- as_draws_rvars(mv_adj_mi_isaac_ses_skin)
+slope_drw <- expand_grid(
+  response = c("eczema", "rhinitis", "wheezing"),
+  landscape_type = c("urban", "rural"),
+  school_context = c("non-green", "green"),
+  effect = c("skin")
+) |> 
+  mutate(
+    slope = case_when(
+      landscape_type == "rural"  & school_context == "non-green" &
+        response == "eczema" & effect == "skin" ~
+        drw$bsp_eczema01_milog_inverse_simpson_skin 
+      + drw$`bsp_eczema01_milog_inverse_simpson_skin:landscape_typehighnaturalness`,
+      landscape_type == "rural"  & school_context == "non-green" &
+        response == "rhinitis" & effect == "skin"  ~
+        drw$bsp_rhinitis01_milog_inverse_simpson_skin 
+      + drw$`bsp_rhinitis01_milog_inverse_simpson_skin:landscape_typehighnaturalness`,
+      landscape_type == "rural"  & school_context == "non-green" &
+        response == "wheezing" & effect == "skin"  ~
+        drw$bsp_wheezing01_milog_inverse_simpson_skin 
+      + drw$`bsp_wheezing01_milog_inverse_simpson_skin:landscape_typehighnaturalness`,
+      landscape_type == "urban"  & school_context == "non-green" 
+      & response == "eczema" & effect == "skin"  ~
+        drw$bsp_eczema01_milog_inverse_simpson_skin,
+      landscape_type == "urban"  & school_context == "non-green" 
+      & response == "rhinitis" & effect == "skin"  ~
+        drw$bsp_rhinitis01_milog_inverse_simpson_skin,
+      landscape_type == "urban" & school_context == "non-green" 
+      & response == "wheezing" & effect == "skin"  ~
+        drw$bsp_wheezing01_milog_inverse_simpson_skin,
+      landscape_type == "rural"  & school_context == "green" &
+        response == "eczema" & effect == "skin" ~
+        drw$bsp_eczema01_milog_inverse_simpson_skin 
+      + drw$`bsp_eczema01_milog_inverse_simpson_skin:landscape_typehighnaturalness`
+      + drw$`bsp_eczema01_milog_inverse_simpson_skin:school_contexthighgreenness`,
+      landscape_type == "rural"  & school_context == "green" &
+        response == "rhinitis" & effect == "skin"  ~
+        drw$bsp_rhinitis01_milog_inverse_simpson_skin 
+      + drw$`bsp_rhinitis01_milog_inverse_simpson_skin:landscape_typehighnaturalness`
+      + drw$`bsp_rhinitis01_milog_inverse_simpson_skin:school_contexthighgreenness`,
+      landscape_type == "rural"  & school_context == "green" &
+        response == "wheezing" & effect == "skin"  ~
+        drw$bsp_wheezing01_milog_inverse_simpson_skin 
+      + drw$`bsp_wheezing01_milog_inverse_simpson_skin:landscape_typehighnaturalness`
+      + drw$`bsp_wheezing01_milog_inverse_simpson_skin:school_contexthighgreenness`,
+      landscape_type == "urban"  & school_context == "green" 
+      & response == "eczema" & effect == "skin"  ~
+        drw$bsp_eczema01_milog_inverse_simpson_skin
+      + drw$`bsp_eczema01_milog_inverse_simpson_skin:school_contexthighgreenness`,
+      landscape_type == "urban"  & school_context == "green" 
+      & response == "rhinitis" & effect == "skin"  ~
+        drw$bsp_rhinitis01_milog_inverse_simpson_skin
+      + drw$`bsp_rhinitis01_milog_inverse_simpson_skin:school_contexthighgreenness`,
+      landscape_type == "urban" & school_context == "green" 
+      & response == "wheezing" & effect == "skin"  ~
+        drw$bsp_wheezing01_milog_inverse_simpson_skin
+      + drw$`bsp_wheezing01_milog_inverse_simpson_skin:school_contexthighgreenness`
+    )      
+  )
+
+slopes_drw <- slope_drw |> 
+  rowwise() |> 
+  mutate(
+    median = median(slope),
+    lower2.5 = quantile(slope, probs = 0.025),
+    upper97.5 = quantile(slope, probs = 0.975),
+    pd = pmax(
+      sum(slope > 0),
+      sum(slope < 0)
+      ) / sum(slope > -Inf),
+    p_value = pd_to_p(pd)
+  )
+
+```
+
+(ref:isaac-diversity-slopes-skin) Slopes (median and 95% credible intervals) for the effect of microbial skin diversity on ISAAC outcomes. Slope values are in log-odds scale and diversity values are log-transformed. Therefore, interpretation a k-fold increase of diversity is associated with a k\^slope multiplication of the odds.
+
+```{r isaac-diversity-slopes-skin}
+slopes_drw |> 
+  select(-slope) |> 
+  mutate(
+    slope = sprintf(
+      "%.2f [%.2f - %.2f]",
+      median,
+      lower2.5,
+      upper97.5
+    ),
+    ten_fold_effect = sprintf(
+      "%.2f [%.2f - %.2f]",
+      10 ^ median,
+      10 ^ lower2.5,
+      10 ^ upper97.5
+    )
+  ) |> 
+  select(
+    response, landscape_type,
+    schoolyard = school_context,
+    effect, slope, ten_fold_effect, p_value
+  ) |> 
+  mutate(
+    response = factor(response, levels = c("rhinitis", "wheezing", "eczema"))
+  ) |> 
+  arrange(response) |> 
+  kable(
+    digits = 2,
+    caption = "(ref:isaac-diversity-slopes-skin)"
+  )
+
+```
+
+```{r isaac-diversity-slope-differences-skin}
+slope_differences_drw <- slope_drw |>
+  group_by(response, landscape_type, effect) |>
+  summarise(
+    slope_difference = slope[school_context == "green"] - slope[school_context == "non-green"]
+  ) |> 
+  mutate(
+    difference = "green - non-green"
+  ) |> 
+  rowwise() |> 
+  mutate(
+    median = median(slope_difference),
+    lower2.5 = quantile(slope_difference, probs = 0.025),
+    upper97.5 = quantile(slope_difference, probs = 0.975),
+    pd = pmax(
+      sum(slope_difference > 0),
+      sum(slope_difference < 0)
+      ) / sum(slope_difference > -Inf),
+    p_value = pd_to_p(pd)
+  )
+
+slope_differences_drw |>
+  select(-slope_difference) |> 
+  mutate(
+    slope_difference = sprintf(
+      "%.2f [%.2f - %.2f]",
+      median,
+      lower2.5,
+      upper97.5
+    )
+  ) |> 
+  select(response, effect, difference, slope_difference, p_value) |> 
+  mutate(
+    response = factor(response, levels = c("rhinitis", "wheezing", "eczema"))
+  ) |> 
+  arrange(response) |> 
+  kable(digits = 2)
+```
+
+```{r conditional-effects-adjusters-isaac-new}
+adj_1 <- c("biological_sex", "f_allergies_family")
+adj_2 <- c(
+  "allergenic_potential"
+)
+
+adjusters <- c(
+  adj_1, adj_2
+)
+
+
+preds <- conditional_effects(
+  mv_adj_mi_isaac_ses_skin,
+  effects = adjusters,
+  resp = c("eczema01", "rhinitis01", "wheezing01")
+)
+
+preds_df <- map2_dfr(
+  preds,
+  names(preds),
+  function(x, y) {
+    response <- stringr::str_extract(y, "^\\w*")
+    adjuster <- names(x)[1]
+    x$response <- response
+    x$effect1__ <- adjuster
+    x
+  }
+)
+
+preds_df <- preds_df |>
+  mutate(
+    response = factor(
+      response,
+      levels = c("rhinitis01", "wheezing01", "eczema01"),
+      labels = c("rhinitis", "wheezing", "eczema")
+    )
+  ) |>
+  as_tibble()
+```
+
+```{r isaac-adjusters-new}
+p_isaac_allergenic_potential <- preds_df |>
+  select(-biological_sex, -f_allergies_family, -landscape_type, -school_context) |>
+  pivot_longer(
+    cols = any_of(adjusters),
+    names_to = "variable",
+    values_to = "value"
+  ) |>
+  filter(
+    variable == effect1__,
+    effect1__ %in% adj_2
+  ) |>
+  mutate(
+    effect1__ = stringr::str_wrap(gsub("_", " ", effect1__), 15),
+    effect1__ = reorder(effect1__, estimate__, FUN = \(x) diff(range(x)))
+  ) |> 
+  ggplot() +
+  geom_ribbon(
+    aes(x = value,
+        y = estimate__,
+        ymin = lower__,
+        ymax = upper__),
+    alpha = 0.4
+    ) +
+  geom_line(
+    aes(
+      x = value,
+      y = estimate__
+    )
+  ) +
+  facet_grid(response ~ effect1__,
+             scales = "free") +
+  scale_y_continuous(labels = scales::percent, limits = c(0, 1)) +
+  labs(y = "Percentage of sensitized children (+/- 95% CI)")
+
+p_isaac_allergenic_potential
+
+saveRDS(
+  p_isaac_allergenic_potential,
+  file.path(data_objects_folder, "p_isaac_allergenic_potential.rds")
+)
+```
+
+```{r isaac-biological-sex-new}
+p_isaac_biological_sex <- preds_df |>
+  filter(effect1__ == "biological_sex") |>
+  ggplot() +
+  geom_pointrange(
+    aes(
+      x = response,
+      y = estimate__,
+      ymin = lower__,
+      ymax = upper__,
+      colour = biological_sex 
+    ),
+    position = position_dodge(width = 0.2)
+  ) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(y = "Percentage of children\n(+/- 95% CI)")
+
+p_isaac_biological_sex
+
+saveRDS(
+  p_isaac_biological_sex,
+  file.path(data_objects_folder, "p_isaac_biological_sex.rds")
+)
+```
+
+
+```{r isaac-biological-sex-riskratio}
+nd <- expand.grid(
+  biological_sex = c("Male", "Female")) |>
+  mutate(
+    school_context = "low greenness",
+    landscape_type = "low naturalness",
+    f_allergies_family = "no",
+    ses_centered = 0,
+    ses_mean = mean(health_data$ses_mean, na.rm = TRUE) |> round(2),
+    garden_score = mean(health_data$garden_score, na.rm = TRUE) |> round(2),
+    natural_elements_score = mean(health_data$natural_elements_score) |>
+      round(2),
+    nature_connectedness =
+      mean(health_data$nature_connectedness, na.rm = TRUE)|> round(2),
+    mean_log_sirm = mean(health_data$mean_log_sirm, na.rm = TRUE)|> round(2),
+    log_invsimpson_plant = mean(health_data$log_invsimpson_plant, na.rm = TRUE),
+    log_invsimpson_dust = mean(health_data$log_invsimpson_dust, na.rm = TRUE),
+    log_invsimpson_soil = mean(health_data$log_invsimpson_soil, na.rm = TRUE),
+    log_inverse_simpson_skin = mean(health_data$log_inverse_simpson_skin, na.rm = TRUE),
+    sum_contact_animals = mean(health_data$sum_contact_animals, na.rm = TRUE) |>
+      round(2),
+    allergenic_potential = mean(
+      health_data$allergenic_potential, na.rm = TRUE
+    ) |>
+      round(2)
+  )
+
+# linear predictor link scale (logit)
+pe <- tidybayes::add_linpred_rvars(
+  object = mv_adj_mi_isaac_ses_skin,
+  re_formula = NA,
+  newdata = nd,
+  prob = 0.95,
+  robust = TRUE,
+  transform = FALSE,
+  resp = c("rhinitis01", "wheezing01", "eczema01")
+)
+
+# calculate risk ratio
+pe <- pe |>
+  select(
+    biological_sex, .linpred
+  ) |> 
+  summarise(
+    across(
+      starts_with(".linpred"),
+      \(x) exp(last(x) - first(x)),
+      .names = "riskratio"
+    ),
+    contrast = paste(last(biological_sex), " / ", first(biological_sex))
+  )
+
+pe |> 
+   mutate(
+    rr_eczema = c(riskratio[, "eczema01"]),
+    rr_rhinitis = c(riskratio[, "rhinitis01"]),
+    rr_wheezing = c(riskratio[, "wheezing01"])
+  ) |>
+  select(-riskratio) |> 
+  pivot_longer(
+    cols = starts_with("rr_"),
+    names_to = "response",
+    names_prefix = "rr_",
+    values_to = "riskratio"
+  ) |>
+  mutate(
+    pd = pmax(sum(riskratio > 1), sum(riskratio < 1)) / sum(riskratio > -Inf),
+    p_value_one_sided = pd_to_p(pd, direction = "one-sided"),
+    p_value_two_sided = pd_to_p(pd, direction = "two-sided"),
+    riskratio = sprintf(
+      "%.2f [%.2f - %.2f]",
+      median(riskratio),
+      quantile2(riskratio, 0.025),
+      quantile2(riskratio, 0.975)
+    )
+  ) |> 
+  select(-pd) |> 
+  mutate(
+    response = factor(response, levels = c("rhinitis", "wheezing", "eczema"))
+  ) |>
+  arrange(response) |> 
+  kable(digits = 2)
+
+```
+
+
+
+```{r isaac-f-allergies-family-new}
+p_isaac_allergies_family <- preds_df |>
+  filter(effect1__ == "f_allergies_family") |>
+  ggplot() +
+  geom_pointrange(
+    aes(
+      x = response,
+      y = estimate__,
+      ymin = lower__,
+      ymax = upper__,
+      colour = f_allergies_family 
+    ),
+    position = position_dodge(width = 0.2)
+  ) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(y = "Percentage of children (+/- 95% CI)")
+
+p_isaac_allergies_family
+
+saveRDS(
+  p_isaac_allergies_family,
+  file.path(data_objects_folder, "p_isaac_allergies_family.rds")
+)
+```
+
+## Skin microbial diversity model
+
+```{r skindiv-model}
+skin_equation <-
+  inverse_simpson_skin | mi() ~
+  mi(log_total_count_skin) +
+  school_context +
+  landscape_type +
+  school_context:landscape_type +
+  mi(log_invsimpson_dust) +
+  mi(log_invsimpson_plant) +
+  mi(log_invsimpson_soil) +
+  mi(nature_connectedness) +
+  mi(garden_score) +
+#  mi(garden_score):landscape_type +
+  mi(sum_contact_animals) +
+  natural_elements_score +
+  mi(mean_log_sirm) +
+  (1|q|school_id)
+
+priors_skin <- set_prior(
+  prior = "normal(0,1)", class = "b", 
+  resp = c(
+    "gardenscore", 
+    "meanlogsirm", "natureconnectedness", "inversesimpsonskin", 
+    "loginvsimpsondust", "loginvsimpsonplant", "loginvsimpsonsoil", 
+    "sumcontactanimals", "logtotalcountskin")
+)
+
+bf_skin <-
+  bf(
+    skin_equation,
+    decomp = "QR",
+    family = Gamma(link = "log")
+  ) +
+  bf(
+    nature_connectedness | mi() ~ school_context*landscape_type + (1|school_id),
+    family = gaussian()
+  ) +
+  bf(
+    garden_score | mi() ~ school_context*landscape_type + (1|school_id),
+    family = gaussian()
+  ) +
+  bf(
+    mean_log_sirm | mi() + trunc(lb = 0) ~ school_context*landscape_type,
+    family = gaussian()
+  ) +
+  bf(
+    log_invsimpson_plant | mi() ~ school_context*landscape_type,
+    family = gaussian()
+  ) +
+  bf(
+    log_invsimpson_dust | mi() ~ school_context*landscape_type,
+    family = gaussian()
+  ) +
+  bf(
+    log_invsimpson_soil | mi() ~ school_context*landscape_type,
+    family = gaussian()
+  ) +
+  bf(
+    sum_contact_animals | mi() ~ school_context*landscape_type
+    + (1|school_id),
+    family = gaussian()
+  ) +
+  bf(
+    log_total_count_skin | mi() ~ school_context*landscape_type
+    + (1|school_id),
+    family = gaussian()
+  ) +
+  set_rescor(FALSE)
+
+
+mv_adj_mi_skin <- brm(
+    formula = bf_skin,
+    data = health_data,
+    prior = priors_skin,
+    cores = 4,
+    silent = 2,
+    refresh = 0,
+    chains = 4,
+    backend = "cmdstanr",
+    normalize = FALSE,
+    file_refit = "on_change",
+    file = file.path(
+      model_folder,
+      "mv_adj_mi_skin")
+)
+```
+
+```{r summary-skindiv}
+pvals <- pd(mv_adj_mi_skin) |>
+  as_tibble() |>
+  separate_wider_delim(
+    Parameter,
+    delim = "_",
+    too_many = "merge",
+    names = c("dropme", "response", "parameter")) |>
+  select(-dropme) |>
+  mutate(p_value = pd_to_p(pd)) |>
+  select(-Effects, -Component)
+
+gather_draws(
+  mv_adj_mi_skin,
+  `b_(inversesimpsonskin).*|bsp_(inversesimpsonskin).*`,
+  regex = TRUE
+) |>
+  separate_wider_delim(
+    .variable,
+    delim = "_",
+    too_many = "merge",
+    names = c("dropme", "response", "parameter")) |>
+  select(-dropme) |>
+  group_by(response, parameter) |>
+  summarise_draws() |>
+  inner_join(pvals) |>
+  relocate(p_value, .before = rhat) |>
+  select(-variable, -rhat, -ess_bulk, -ess_tail) |>
+  mutate(
+    estimate = sprintf(
+      "%.2f [%.2f - %.2f]",
+      median,
+      q5,
+      q95
+    )
+  ) |> 
+  select(response, parameter, estimate, p_value) |>
+  kable(digits = 2)
+```
+
+\@ref(fig:mcmc-intervals-skindiv)
+
+(ref:mcmc-intervals-skindiv) Parameter estimates for the effects on microbial skin diversity. Point estimates represent the median of the posterior distribution. Thick and thin lines show 50% and 90% inner probability mass of the posterior distribution. Effects are with reference to urban landscape type and non-green schoolyards.
+
+```{r mcmc-intervals-skindiv, fig.height = 200/25.4, out.width="120%", fig.cap="(ref:mcmc-intervals-skindiv)"}
+isaac_alldata <- mcmc_intervals_data(
+  mv_adj_mi_skin,
+  regex_pars = "^(b|bsp)_(inversesimpsonskin)",
+  prob = 0.5, # inner interval probability mass
+  prob_outer = 0.9, # outer interval probability mass
+  point_est = "median"
+) |> 
+  mutate(
+    dataset = "all data"
+  )
+
+isaac_alldata <- isaac_alldata |> 
+  mutate(
+    response = stringr::str_extract(string = parameter, "^(b|bsp)_(.+)_", group = 2),
+    parameter = gsub("^(b|bsp)_inversesimpsonskin_", "", parameter),
+    parameter = gsub("landscape_typehighnaturalness", "Rural", parameter),
+    parameter = gsub("school_contexthighgreenness", "Green schoolyard", parameter),
+    parameter = gsub("natural_elements_score", "Natural elements score", parameter),
+    parameter = gsub("migarden_score", "Garden score", parameter),
+    parameter = gsub("mimean_log_sirm", "Local air pollution", parameter),
+    parameter = gsub("minature_connectedness", "Nature connectedness", parameter),
+    parameter = gsub("misum_contact_animals", "Contact animals", parameter),
+    parameter = gsub("milog_invsimpson_plant", "Diversity plant microbiome", parameter),
+    parameter = gsub("milog_invsimpson_dust", "Diversity dust microbiome", parameter),
+    parameter = gsub("milog_invsimpson_soil", "Diversity soil microbiome", parameter),
+    parameter = gsub("milog_total_count_skin", "Skin total read count", parameter),
+    parameter = reorder(parameter, m)
+  )
+
+mcmc_skindiv <- isaac_alldata |>
+  filter(
+    parameter != "Intercept"
+  ) |> 
+  ggplot() +
+  geom_vline(xintercept = 0, alpha = 0.5) +
+  geom_linerange(
+    aes(
+      x = m,
+      xmin = ll,
+      xmax = hh,
+      y = parameter
+    ),
+    linewidth = 1, alpha = 0.5, position = position_dodge(width = 0.5)
+  ) +
+  geom_linerange(
+    aes(
+      x = m,
+      xmin = l,
+      xmax = h,
+      y = parameter
+    ),
+    linewidth = 2, alpha = 0.5, position = position_dodge(width = 0.5)
+  ) +
+  geom_point(
+    aes(
+      x = m,
+      y = parameter
+    ),
+    size = 3, alpha = 0.5, position = position_dodge(width = 0.5)
+  ) +
+  labs(
+    x = "Parameter estimates"
+  ) +
+  theme(
+    legend.position = "top",
+    axis.title.y = element_blank()
+  )
+
+mcmc_skindiv
+
+saveRDS(
+  mcmc_skindiv,
+  file.path(data_objects_folder, "mcmc_skindiv.rds")
+)
+
+```
+
+Posterior predictive checks:
+
+```{r ppcheck-skin-new}
+responses <- mv_adj_mi_skin$formula$responses
+checks <- vector("list", length(responses))
+for (i in seq_along(responses)) {
+  checks[[i]] <- pp_check(
+    mv_adj_mi_skin,
+    resp = responses[i],
+    ndraws = 50) + labs(x = responses[i])
+}
+checks |>
+  wrap_plots()
+```
+
+```{r adj-mi-skin-sclt}
+preds <- conditional_effects(
+  mv_adj_mi_skin,
+  effects = "landscape_type:school_context",
+  resp = c("inversesimpsonskin")
+  )
+
+preds_df <- map2_dfr(
+  preds,
+  names(preds),
+  function(x, y) {
+    response <- stringr::str_extract(y, "^\\w*")
+    x$response <- response
+    x
+  }
+)
+
+preds_df <- preds_df |>
+  mutate(
+    landscape_type = factor(
+      landscape_type,
+      levels = c("low naturalness", "high naturalness"),
+      labels = c("urban", "rural")
+    ),
+    school_context = factor(
+      school_context,
+      levels = c("low greenness", "high greenness"),
+      labels = c("non-green", "green")
+    ),
+    response = factor(
+      response,
+      levels = c("rhinitis01", "wheezing01", "eczema01"),
+      labels = c("rhinitis", "wheezing", "eczema")
+    )
+  ) |>
+  as_tibble()
+
+p_skindiv_ltsc <- preds_df |>
+  ggplot() +
+  geom_pointrange(
+    aes(
+      x = landscape_type,
+      y = estimate__,
+      ymin = lower__,
+      ymax = upper__,
+      colour = school_context
+    ),
+    position = position_dodge(width = 0.5)
+  ) +
+  scale_colour_manual(values = school_colours) +
+  labs(
+    x = "Landscape type",
+    colour = "Schoolyard",
+    y = "Microbial skin diversity (+/- 95% CI)"
+  ) +
+  scale_y_continuous()
+
+p_skindiv_ltsc
+
+saveRDS(
+  p_skindiv_ltsc,
+  file.path(data_objects_folder, "p_skindiv_ltsc.rds")
+)
+```
+
+We can calculate post-hoc comparison, stratified by landscape type to see if school types differ significantly within landscape types:
+
+```{r emmeans-sclt-skindiv}
+#Error : brms' emmeans support for multivariate models is limited to cases where all univariate models have the same family.
+# instead calc manually
+nd <- expand.grid(
+  school_context = c("low greenness", "high greenness"),
+  landscape_type = c("low naturalness", "high naturalness")
+) |>
+  mutate(
+    garden_score = mean(health_data$garden_score, na.rm = TRUE) |> round(2),
+    natural_elements_score = mean(health_data$natural_elements_score) |>
+      round(2),
+    nature_connectedness =
+      mean(health_data$nature_connectedness, na.rm = TRUE)|> round(2),
+    mean_log_sirm = mean(health_data$mean_log_sirm, na.rm = TRUE)|> round(2),
+    log_invsimpson_plant = mean(health_data$log_invsimpson_plant, na.rm = TRUE),
+    log_invsimpson_dust = mean(health_data$log_invsimpson_dust, na.rm = TRUE),
+    log_invsimpson_soil = mean(health_data$log_invsimpson_soil, na.rm = TRUE),
+    sum_contact_animals = mean(health_data$sum_contact_animals, na.rm = TRUE) |>
+      round(2),
+    log_total_count_skin = mean(health_data$log_total_count_skin, na.rm = TRUE) |>
+      round()
+  )
+# linear predictor link scale (logit)
+pe <- tidybayes::add_linpred_rvars(
+  object = mv_adj_mi_skin,
+  re_formula = NA,
+  newdata = nd,
+  prob = 0.95,
+  robust = TRUE,
+  transform = FALSE,
+  resp = c("inversesimpsonskin")
+)
+
+pe <- pe |>
+  mutate(
+    school_context = factor(
+      school_context,
+      levels = c("low greenness", "high greenness"),
+      labels = c("non-green", "green") 
+    ),
+    landscape_type = factor(
+      landscape_type,
+      levels = c("low naturalness", "high naturalness"),
+      labels = c("urban", "rural")
+    )
+  ) |>
+  select(
+    landscape_type, school_context, .linpred
+  ) |> 
+  summarise(
+    across(
+      starts_with(".linpred"),
+      \(x) exp(last(x) - first(x)),
+      .names = "ratio"
+    ),
+    contrast = paste(last(school_context), " / ", first(school_context)),
+    .by = c(landscape_type)
+  )
+
+pe |> 
+  select(landscape_type, contrast, ratio) |> 
+  mutate(
+    pd = pmax(sum(ratio > 1), sum(ratio < 1)) / sum(ratio > -Inf),
+    p_value_one_sided = pd_to_p(pd, direction = "one-sided"),
+    p_value_two_sided = pd_to_p(pd, direction = "two-sided"),
+    ratio = sprintf(
+      "%.2f [%.2f - %.2f]",
+      median(ratio),
+      quantile2(ratio, 0.025),
+      quantile2(ratio, 0.975)
+    )
+  ) |> 
+  select(-pd) |> 
+  kable(digits = 2)
+
+```
+
+```{r skindiv-other-effects}
+effects = c(
+    "log_invsimpson_dust",
+    "log_invsimpson_plant",
+    "log_invsimpson_soil",
+    "nature_connectedness",
+    "garden_score",
+    "sum_contact_animals",
+    "natural_elements_score",
+    "mean_log_sirm"
+  )
+preds <- conditional_effects(
+  mv_adj_mi_skin,
+  effects = effects,
+  resp = "inversesimpsonskin"
+)
+
+preds_df <- map2_dfr(
+  preds,
+  names(preds),
+  function(x, y) {
+    response <- stringr::str_extract(y, "^\\w*")
+    x$response <- response
+    x
+  }
+)
+
+preds_df <- preds_df |>
+  as_tibble() |> 
+  pivot_longer(
+    cols = any_of(effects),
+    names_to = "variable",
+    values_to = "value"
+  ) |>
+  filter(
+    value == effect1__
+  )
+
+p_skindiv_other_effects <- preds_df |>
+  mutate(
+    variable = case_match(
+      variable,
+      "log_invsimpson_dust" ~ "Microbial diversity dust",
+      "log_invsimpson_plant" ~ "Microbial diversity plant",
+      "log_invsimpson_soil" ~ "Microbial diversity soil",
+      "nature_connectedness" ~ "Nature connectedness",
+      "garden_score" ~ "Garden score",
+      "sum_contact_animals" ~ "Contact animals",
+      "natural_elements_score" ~ "Natural elements score",
+      "mean_log_sirm" ~ "SIRM"
+    )
+  ) |>
+  ggplot() +
+  geom_ribbon(
+    aes(x = value,
+        y = estimate__,
+        ymin = lower__,
+        ymax = upper__
+        ),
+    alpha = 0.3
+    ) +
+  geom_line(
+    aes(
+      x = value,
+      y = estimate__
+    )
+  ) +
+  facet_wrap(~ variable, scales = "free_x") +
+  labs(
+    y = "Microbial skin diversity"
+  )
+
+p_skindiv_other_effects
+
+saveRDS(
+  p_skindiv_other_effects,
+  file.path(data_objects_folder, "p_skindiv_other_effects.rds")
+)
+```
+
+```{r skin-total-count}
+preds <- conditional_effects(
+  mv_adj_mi_skin,
+  effects = c("log_total_count_skin"),
+  resp = "inversesimpsonskin"
+)
+
+preds_df <- map2_dfr(
+  preds,
+  names(preds),
+  function(x, y) {
+    response <- stringr::str_extract(y, "^\\w*")
+    x$response <- response
+    x
+  }
+)
+
+p_skindiv_totalreads <- preds_df |> 
+  ggplot() +
+  geom_ribbon(
+    aes(x = exp(log_total_count_skin),
+        y = estimate__,
+        ymin = lower__,
+        ymax = upper__
+    ),
+    alpha = 0.3
+  ) +
+  geom_line(
+    aes(
+      x = exp(log_total_count_skin),
+      y = estimate__
+    )
+  ) +
+  scale_x_log10() +
+  labs(
+    x = "Skin total read count",
+    y = "Skin microbial diversity"
+  )
+
+
+p_skindiv_totalreads
+
+saveRDS(
+  p_skindiv_totalreads,
+  file.path(data_objects_folder, "p_skindiv_totalreads.rds")
+)
+```
+
+
+# Session info
+
+```{r session-info}
+sessioninfo::session_info()
+```
+
+# References
