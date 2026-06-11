@@ -14,11 +14,11 @@ if (!rmarkdown::pandoc_available()) {
 }
 
 # download the zenodo deposit (dataset)
-library(inborutils)
+source(here("source", "download_zenodo.R"))
 library(frictionless)
 library(here)
 
-inborutils::download_zenodo(
+download_zenodo(
   doi = "10.5281/zenodo.10527033",
   path = here("data")
 )
