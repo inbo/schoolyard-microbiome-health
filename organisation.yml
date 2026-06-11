@@ -13,7 +13,7 @@ info@inbo.be:
   orcid: yes
   zenodo: inbo
   rightsholder: shared
-  funder: optional
+  funder: when no other
   publisher: single
   license:
     package:
@@ -112,12 +112,12 @@ info@vlaamsewaterweg.be:
     data: []
 no-reply@belspo.be:
   name:
-    nl-BE: BELSPO
-  email: info@belspo.be
+    nl-BE: POD Wetenschapsbeleid (BELSPO)
+  email: no-reply@belspo.be
   website: https://www.belspo.be/
   orcid: no
   rightsholder: optional
-  funder: optional
+  funder: single
   publisher: optional
   license:
     package: []

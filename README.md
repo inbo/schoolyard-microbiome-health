@@ -17,7 +17,7 @@
 [Lommelen, Els![ORCID logo](https://info.orcid.org/wp-content/uploads/2019/11/orcid_16x16.png)](https://orcid.org/0000-0002-3481-5684)[^aut][^INBO];
 [Smets, Wenke![ORCID logo](https://info.orcid.org/wp-content/uploads/2019/11/orcid_16x16.png)](https://orcid.org/0000-0001-5611-6094)[^aut][^UnoA];
 [Research Institute for Nature and Forest (INBO)](mailto:info%40inbo.be)[^pbl][^cph];
-[BELSPO](mailto:info%40belspo.be)[^fnd]
+[BELSPO](mailto:no-reply%40belspo.be)[^fnd]
 
 
 [^aut]: author
