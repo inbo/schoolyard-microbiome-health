@@ -3,6 +3,7 @@ if (!"renv" %in% rownames(installed.packages())) {
 }
 
 # restore specific R package versions
+options(renv.config.pak.enabled = TRUE)
 renv::restore()
 
 # install cmdstan
