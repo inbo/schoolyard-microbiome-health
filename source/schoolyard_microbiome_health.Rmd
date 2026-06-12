@@ -213,17 +213,20 @@ outdoor_play <- outdoor_play |>
              )
       )
     ) |>
-  group_by(child_id,question_code) |>
-  summarise(response = mean(response, na.rm = TRUE)) |>
-  ungroup() |>
-  group_by(child_id) |>
-  summarise(nature_exposure = sum(response) / 11)
+  summarise(
+    response = mean(response, na.rm = TRUE),
+    .by = c(child_id, question_code)
+  ) |>
+  summarise(
+    nature_exposure = sum(response) / 11,
+    .by = c(child_id)
+  )
 
 health_data <- health_data |>
   left_join(outdoor_play, by = "child_id")
 ```
 
-```{r garden-data}
+```{r garden-data, warning=FALSE}
 living_env <- read_resource(
   cleaned_data, "wp5_parents_living_environment_data")
 
@@ -315,10 +318,12 @@ health_data <- health_data |>
 
 ```{r read-microbiome-diversity}
 env_samples_diversity <- readr::read_csv(
-  here("data", "env_samples_diversity.csv")
+  here("data", "env_samples_diversity.csv"),
+  show_col_types = FALSE
 )
 skin_samples_diversity <- readr::read_csv(
-  here("data", "skin_samples_diversity.csv")
+  here("data", "skin_samples_diversity.csv"),
+  show_col_types = FALSE
 )
 ```
 
@@ -428,25 +433,20 @@ t0
 
 ## Exploration health outcomes
 
-Missingness is about 4% for ISAAC data, 10% for KIDSCREEN data and 31% for outcomes derived from the parent questionnaires.
+Missingness is about 4% for ISAAC data and 10% for KIDSCREEN data.
 
 ```{r}
 health_outcomes <- health_data |>
   select(
     starts_with("t_score"),
-    ends_with("_01"),
-    n_sensitive,
-    allergic_to_animals,
-    general_health_child,
-    has_asthma,
-    has_hay_fever
+    ends_with("_01")
   )
 
 health_outcomes |>
   naniar::vis_miss()
 ```
 
-We calculate Spearman rank correlations between outcomes and visualise them.
+We calculate Spearman rank correlations between outcomes and visualise them in Figure \@ref(fig:corrplot).
 
 The KIDSCREEN scores are all positively correlated with each other.
 
@@ -457,11 +457,10 @@ The KIDSCREEN scores are all positively correlated with each other.
 -   soc: friends
 
 The ISAAC scores are also correlated but to a lesser extent.
-The `n_sensitive` variable is positively correlated with eczema, rhinitis and wheezing by construction (equals their sum).
 
-The outcomes derived from the parents survey are positively correlated except for general health of the child.
+(ref:corrplot) Spearman rank correlation matrix among modelled outcome variables.
 
-```{r}
+```{r corrplot, fig.cap="(ref:corrplot)"}
 cordat <- health_outcomes |>
   cor(method = "spearman", use = "pairwise.complete.obs")
 
@@ -469,38 +468,6 @@ corrplot::corrplot(cordat)
 ```
 
 ## Exploration of covariates
-
-### Microbial diversity
-
-```{r}
-health_data |>
-  select(
-    starts_with("inv")
-  ) |>
-  pairs()
-
-health_data |>
-  select(
-    starts_with("obs")
-  ) |>
-  pairs()
-
-health_data |>
-  select(ends_with("skin")) |>
-  plot()
-
-health_data |>
-  select(ends_with("plant")) |>
-  plot()
-
-health_data |>
-  select(ends_with("soil")) |>
-  plot()
-
-health_data |>
-  select(ends_with("dust")) |>
-  plot()
-```
 
 ### Missingness
 
@@ -524,7 +491,11 @@ covars <- ~
   allergies_family
 ```
 
-```{r missingness}
+Missingness patterns among covariates (Figure \@ref(fig:missing-covars)).
+
+(ref:missing-covars) Variables (columns) are sorted in order of amount of missingness and observations (rows) are clustered according to missingness.
+
+```{r missing-covars, fig.cap = "(ref:missing-covars)"}
 health_data |>
   select(
     all_of(all.vars(covars))) %>%
@@ -536,10 +507,14 @@ health_data |>
 
 ### Collinearity
 
+We checked Spearman rank correlations between covariates (Figure \@ref(fig:collinearity1)).
+
 The strongest correlation between continuous covariates equals 0.52 and is between `pm25` and `ses_mean`.
 This is a modest correlation and it is likely not problematic to include both covariates in a model.
 
-```{r collinearity1}
+(ref:collinearity1) Correlation plot showing Spearman rank correlation between covariates.
+
+```{r collinearity1, fig.cap = "(ref:collinearity1)"}
 cordat2 <- health_data |>
   select(
     all_of(all.vars(covars))) |>
@@ -554,11 +529,13 @@ corrplot::corrplot(
   number.cex = 0.8)
 ```
 
-We also look at relationships between categorical and continuous covariates.
+We also look at relationships between categorical and continuous covariates (Figure \@ref(fig:collinearity2)).
 The resulting relationships do not indicate collinearity problems.
 One minor concern is that the range of `ses_mean` values within high naturalness landscape for high greenness schools is more restricted compared to the other factor combinations.
 
-```{r collinearity2, fig.height=200/25.4}
+(ref:collinearity2) Distribution of covariate values as a function of landscape type, school context and biological sex.
+
+```{r collinearity2, fig.height=200/25.4, fig.cap = "(ref:collinearity2)"}
 health_data |>
   select(
     all_of(all.vars(covars))) |>
@@ -573,7 +550,8 @@ health_data |>
       levels = c("low greenness", "high greenness"),
       labels = c("non-green", "green")
     )
-  ) |> 
+  ) |>
+  filter(!is.na(value), !is.na(biological_sex)) |>
   ggplot() +
   stat_sum(
     aes(
@@ -607,7 +585,7 @@ All missing data are imputed during model fit.
 Missing data are declared as parameters to be estimated by there own sets of regression equations that include the interaction between schoolyard and landscape type, as well as a random intercept for school in case of child-level varying covariates.
 For the main equations, correlations between the school random intercepts are modelled as well.
 
-```{r adj-mi-ks}
+```{r adj-mi-ks, warning=FALSE}
 rhs_ks <- ~ mi(ses_mean) +
   landscape_type +
   school_context +
@@ -695,11 +673,10 @@ mv_adj_mi_ks <- brm(
       model_folder,
       "mv_adj_mi_ks")
 )
-
 ```
 
-```{r summary-ks}
-pvals <- pd(mv_adj_mi_ks) |>
+```{r summary-ks, warning=FALSE}
+pvals <- pd(mv_adj_mi_ks, verbose = FALSE) |>
   as_tibble() |>
   separate_wider_delim(
     Parameter,
@@ -707,7 +684,7 @@ pvals <- pd(mv_adj_mi_ks) |>
     too_many = "merge",
     names = c("dropme", "response", "parameter")) |>
   select(-dropme) |>
-  mutate(p_value = pd_to_p(pd)) |>
+  mutate(p_value = pd_to_p(pd, verbose = FALSE)) |>
   select( -Effects, -Component)
 
 gather_draws(mv_adj_mi_ks, `b_tsc.*|bsp_tsc.*`, regex = TRUE) |>
@@ -719,7 +696,7 @@ gather_draws(mv_adj_mi_ks, `b_tsc.*|bsp_tsc.*`, regex = TRUE) |>
   select(-dropme) |>
   group_by(response, parameter) |>
   summarise_draws() |>
-  inner_join(pvals) |>
+  inner_join(pvals, by = join_by(response, parameter)) |>
   relocate(p_value, .before = rhat) |>
   select(-variable, -rhat, -ess_bulk, -ess_tail) |>
   kable(digits = 2)
@@ -778,11 +755,11 @@ ks_alldata <- mcmc_intervals_data(
   ) 
 ```
 
-\@ref(fig:mcmc-intervals-kidscreen-all-data)
+Figure \@ref(fig:mcmc-intervals-kidscreen-all-data)
 
 (ref:mcmc-intervals-kidscreen-all-data) Parameter estimates for the effects on physical well-being (scores are rescaled by subtracting 50 and dividing the result by 10). Point estimates represent the median of the posterior distribution. Thick and thin lines show 50% and 90% inner probability mass of the posterior distribution. Effects are with reference to urban landscape type, boys and non-green schoolyards.
 
-```{r mcmc-intervals-kidscreen-all-data, fig.height=6, out.width="100%", fig.cap= "(ref:mcmc-intervals-kidscreen-all-data)"}
+```{r mcmc-intervals-kidscreen-all-data, fig.height=6, out.width="100%", fig.cap= "(ref:mcmc-intervals-kidscreen-all-data)", message=FALSE}
 mcmc_intervals_kidscreen_all_data <- ks_alldata |>
   filter(
     parameter != "Intercept") |>
@@ -829,7 +806,7 @@ saveRDS(
 )
 ```
 
-```{r ppcheck-ks}
+```{r ppcheck-ks, warning=FALSE}
 responses <- mv_adj_mi_ks$formula$responses
 checks <- vector("list", length(responses))
 for (i in seq_along(responses)) {
@@ -842,14 +819,16 @@ checks |>
   wrap_plots()
 ```
 
-Interaction schoolyard and landscape-type:
+Figure \@ref(fig:adj-mi-ks-preds-sclt) shows the interaction between schoolyard and landscape-type for all five KIDSCREEN indicators.
 
-```{r adj-mi-ks-preds-sclt, out.width="120%"}
+(ref:adj-mi-ks-preds-sclt) KIDSCREEN-27 score predictions (median and 95% credible intervals) as a function of landscape type and schoolyard.
+
+```{r adj-mi-ks-preds-sclt, out.width="120%", fig.cap = "(ref:adj-mi-ks-preds-sclt)"}
 preds <- conditional_effects(
   mv_adj_mi_ks,
   effects = "landscape_type:school_context",
   resp = c("tscorephy", "tscorepwb", "tscorepar", "tscoresoc", "tscoresch")
-  )
+)
 
 
 preds_df <- map2_dfr(
@@ -910,7 +889,11 @@ saveRDS(
 )
 ```
 
-```{r adj-mi-ks-preds-sclt-school-effects, out.width="120%"}
+Figure \@ref(fig:adj-mi-ks-preds-sclt-school-effects) shows the interaction between schoolyard and landscape-type including the random effects of each school for the five KIDSCREEN indicators.
+
+(ref:adj-mi-ks-preds-sclt-school-effects) KIDSCREEN-27 score predictions (median and 95% credible intervals) as a function of landscape type and schoolyard, including the random effects for each school.
+
+```{r adj-mi-ks-preds-sclt-school-effects, out.width="120%", fig.cap = "(ref:adj-mi-ks-preds-sclt-school-effects)"}
 preds <- conditional_effects(
   mv_adj_mi_ks,
   effects = "school_id",
@@ -1021,7 +1004,7 @@ contr <- emmeans::contrast(
   )
 
 pvals <- pd(contr) |>
-  mutate(p_value = pd_to_p(pd))
+  mutate(p_value = pd_to_p(pd, verbose = FALSE))
 
 confint(contr) |> 
   as_tibble() |>
@@ -1311,10 +1294,9 @@ emt <- emmeans::emtrends(
 )
 
 pvals_emt <- pd(emt) |>
-  mutate(p_value = pd_to_p(pd))
+  mutate(p_value = pd_to_p(pd, verbose = FALSE))
 
 annot <- print(emt, export = TRUE)
-
 ```
 
 Table \@ref(tab:slopes-2way) shows the corresponding slopes.
@@ -1372,7 +1354,7 @@ contr <- emmeans::contrast(
 
 
 pvals <- pd(contr) |>
-  mutate(p_value = pd_to_p(pd))
+  mutate(p_value = pd_to_p(pd, verbose = FALSE))
 
 annot <- print(contr, export = TRUE)
 ```
@@ -1517,7 +1499,7 @@ saveRDS(
 ## Wheezing, rhinitis, eczema (ISAAC survey data)
 
 
-```{r adj-mi-isaac-new}
+```{r adj-mi-isaac-new, warning=FALSE}
 priors <- set_prior(
   prior = "normal(0,1)", class = "b", 
   resp = c(
@@ -1585,6 +1567,11 @@ mv_adj_mi_isaac_ses_skin <- brm(
       model_folder,
       "mv_adj_mi_isaac_ses_skin")
 )
+
+# 22 rows containing either missing response variable
+# or missing biological sex are excluded
+# because stan cannot impute discrete parameters
+# n remaining equals 491
 ```
 
 ```{r summary-isaac-new}
@@ -1596,7 +1583,7 @@ pvals <- pd(mv_adj_mi_isaac_ses_skin) |>
     too_many = "merge",
     names = c("dropme", "response", "parameter")) |>
   select(-dropme) |>
-  mutate(p_value = pd_to_p(pd)) |>
+  mutate(p_value = pd_to_p(pd, verbose = FALSE)) |>
   select(-Effects, -Component)
 
 gather_draws(
@@ -1716,7 +1703,7 @@ saveRDS(
 
 Posterior predictive checks:
 
-```{r ppcheck-isaac-new}
+```{r ppcheck-isaac-new, warning=FALSE}
 responses <- mv_adj_mi_isaac_ses_skin$formula$responses
 checks <- vector("list", length(responses))
 for (i in seq_along(responses)) {
@@ -1729,7 +1716,12 @@ checks |>
   wrap_plots()
 ```
 
-```{r adj-mi-isaac-preds-sclt-new}
+Figure \@ref(fig:adj-mi-isaac-preds-sclt-new)
+
+(ref:adj-mi-isaac-preds-sclt-new) Predicted percentage of children sensitized to rhinitis, wheezing or eczema as a function of landscape type and schoolyard. The centrality measure is the median and the line intervals correspond to 95% credible intervals. 
+
+
+```{r adj-mi-isaac-preds-sclt-new, fig.cap = "(ref:adj-mi-isaac-preds-sclt-new)"}
 preds <- conditional_effects(
   mv_adj_mi_isaac_ses_skin,
   effects = "landscape_type:school_context",
@@ -1795,7 +1787,11 @@ saveRDS(
 )
 ```
 
-```{r adj-mi-isaac-preds-sclt-school-effects}
+Figure \@ref(fig:adj-mi-isaac-preds-sclt-school-effects)
+
+(ref:adj-mi-isaac-preds-sclt-school-effects) Predicted percentage of children sensitized to rhinitis, wheezing or eczema as a function of landscape type and schoolyard. The centrality measure is the median and the line intervals correspond to 95% credible intervals. 
+
+```{r adj-mi-isaac-preds-sclt-school-effects, fig.cap = "(ref:adj-mi-isaac-preds-sclt-school-effects)"}
 preds <- conditional_effects(
   mv_adj_mi_isaac_ses_skin,
   effects = "school_id",
@@ -1924,7 +1920,7 @@ nd <- expand.grid(
     ) |>
       round(2)
   ) |>
-  inner_join(ses_ranges_landscape) |>
+  inner_join(ses_ranges_landscape, by = join_by(landscape_type)) |>
   filter(
     ses_mean >= min_overlap_ses_mean,
     ses_mean <= max_overlap_ses_mean
@@ -2190,7 +2186,7 @@ preds_df_ses_sc_lt <- map2_dfr(
 )
 
 preds_df_ses_sc_lt <- preds_df_ses_sc_lt |>
-  inner_join(ses_ranges) |>
+  inner_join(ses_ranges, by = join_by(school_context, landscape_type)) |>
   filter(
     ses_mean >= min_ses_mean,
     ses_mean <= max_ses_mean
@@ -2313,7 +2309,7 @@ slope_drw <- expand_grid(
       sum(slope > 0),
       sum(slope < 0)
       ) / sum(slope > -Inf),
-    p_value = pd_to_p(pd)
+    p_value = pd_to_p(pd, verbose = FALSE)
   )
 
 slope_drw |> 
@@ -2415,7 +2411,7 @@ pe_pvals <-
       sum(oddsratio > 1),
       sum(oddsratio < 1)
       ) / sum(oddsratio > -Inf),
-    p_eczema = pd_to_p(pd)
+    p_eczema = pd_to_p(pd, verbose = FALSE)
   )
 
 pe <- pe |>
@@ -2450,8 +2446,8 @@ pe |>
   ) +
   geom_hline(yintercept = 1) +
   scale_y_continuous(
-    transform = scales::log10_trans(),
-    breaks = c(1/100, 1/10, 1, 10, 100)
+    transform = scales::pseudo_log_trans(base = 10),
+    breaks = c( 1/5, 1/2, 1, 2, 5, 10, 100)
   ) +
   facet_grid(allergy ~ landscape_type, scales = "free_y") +
   labs(y = "Odds-ratio\n(green/non-green)",
@@ -2614,7 +2610,7 @@ slopes_drw <- slope_drw |>
       sum(slope > 0),
       sum(slope < 0)
       ) / sum(slope > -Inf),
-    p_value = pd_to_p(pd)
+    p_value = pd_to_p(pd, verbose = FALSE)
   )
 
 ```
@@ -2672,7 +2668,7 @@ slope_differences_drw <- slope_drw |>
       sum(slope_difference > 0),
       sum(slope_difference < 0)
       ) / sum(slope_difference > -Inf),
-    p_value = pd_to_p(pd)
+    p_value = pd_to_p(pd, verbose = FALSE)
   )
 
 slope_differences_drw |>
@@ -3003,7 +2999,7 @@ mv_adj_mi_skin <- brm(
 )
 ```
 
-```{r summary-skindiv}
+```{r summary-skindiv, warning=FALSE}
 pvals <- pd(mv_adj_mi_skin) |>
   as_tibble() |>
   separate_wider_delim(
@@ -3012,7 +3008,7 @@ pvals <- pd(mv_adj_mi_skin) |>
     too_many = "merge",
     names = c("dropme", "response", "parameter")) |>
   select(-dropme) |>
-  mutate(p_value = pd_to_p(pd)) |>
+  mutate(p_value = pd_to_p(pd, verbose = FALSE)) |>
   select(-Effects, -Component)
 
 gather_draws(
@@ -3127,7 +3123,7 @@ saveRDS(
 
 Posterior predictive checks:
 
-```{r ppcheck-skin-new}
+```{r ppcheck-skin-new, warning=FALSE}
 responses <- mv_adj_mi_skin$formula$responses
 checks <- vector("list", length(responses))
 for (i in seq_along(responses)) {
@@ -3324,7 +3320,7 @@ preds_df <- preds_df |>
 
 p_skindiv_other_effects <- preds_df |>
   mutate(
-    variable = case_match(
+    variable = recode_values(
       variable,
       "log_invsimpson_dust" ~ "Microbial diversity dust",
       "log_invsimpson_plant" ~ "Microbial diversity plant",
@@ -3415,8 +3411,14 @@ saveRDS(
 
 # Session info
 
-```{r session-info}
+<details>
+<summary>Click to view Session Info</summary> 
+
+```{r session-info, echo=FALSE}
 sessioninfo::session_info()
 ```
+
+</details>
+
 
 # References
