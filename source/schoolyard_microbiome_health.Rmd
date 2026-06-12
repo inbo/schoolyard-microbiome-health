@@ -37,6 +37,7 @@ library(bayestestR)
 library(INBOtheme)
 library(bayesplot)
 library(posterior)
+library(kableExtra)
 
 theme_set(theme_inbo(transparent = TRUE))
 
