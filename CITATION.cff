@@ -1,0 +1,38 @@
+cff-version: 1.2.0
+message: If you use this software, please cite it using these metadata.
+title: "Repository for Environmental bacteria link green schoolyards to better child
+  well-being and fewer allergy symptoms."
+authors:
+- given-names: Hans
+  family-names: Van Calster
+  affiliation: Research Institute for Nature and Forest (INBO)
+  orcid: 0000-0001-8595-8426
+- given-names: Els
+  family-names: Lommelen
+  affiliation: Research Institute for Nature and Forest (INBO)
+  orcid: 0000-0002-3481-5684
+- given-names: Wenke
+  family-names: Smets
+  affiliation: University of Antwerp
+  orcid: 0000-0001-5611-6094
+keywords:
+- environmental health
+- allergy
+- well-being
+- reproducible research
+- microbiome
+contact:
+- given-names: Hans
+  family-names: Van Calster
+  affiliation: Research Institute for Nature and Forest (INBO)
+  orcid: 0000-0001-8595-8426
+doi: ~
+license: CC BY 4.0
+repository-code: https://github.com/inbo/schoolyard-microbiome-health/
+type: software
+abstract: "Code and supplementary data for the paper: Environmental bacteria link
+  green schoolyards to better child well-being and fewer allergy symptoms."
+identifiers:
+- type: url
+  value: https://www.uantwerpen.be/nl/projecten/baseball/
+version: 0.0.0
