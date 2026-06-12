@@ -15,9 +15,9 @@ if (!rmarkdown::pandoc_available()) {
 }
 
 # download the zenodo deposit (dataset)
-source(here("source", "download_zenodo.R"))
 library(frictionless)
 library(here)
+source(here("source", "download_zenodo.R"))
 
 download_zenodo(
   doi = "10.5281/zenodo.10527033",
@@ -39,4 +39,4 @@ if (!dir.exists(here::here("output"))) {
 rmarkdown::render(
   input = here::here("source", "schoolyard_microbiome_health.Rmd"),
   output_dir = here::here("output")
-  )
+)
