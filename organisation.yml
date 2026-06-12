@@ -14,7 +14,7 @@ info@inbo.be:
   zenodo: inbo
   rightsholder: shared
   funder: when no other
-  publisher: single
+  publisher: when no other
   license:
     package:
       GPL-3: https://raw.githubusercontent.com/inbo/citeme/refs/heads/main/inst/licenses/gplv3.md
