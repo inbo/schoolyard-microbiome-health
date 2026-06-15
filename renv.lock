@@ -1183,7 +1183,7 @@
       ],
       "Imports": [
         "assertthat",
-        "citeme (>= 0.1.1)",
+        "citeme (>= 0.1.2)",
         "cli",
         "desc",
         "devtools (> 2.4.0)",
@@ -1229,7 +1229,7 @@
       "RemoteUsername": "inbo",
       "RemotePkgRef": "inbo/checklist@0.5.4",
       "RemoteRef": "0.5.4",
-      "RemoteSha": "1cfa38079293d89312802a33a1311d8e0600fe82",
+      "RemoteSha": "bbfad2905d5bf9dd7659a28507b33d05650fac93",
       "NeedsCompilation": "no",
       "Author": "Thierry Onkelinx [aut, cre] (ORCID: <https://orcid.org/0000-0001-8804-4216>, affiliation: Research Institute for Nature and Forest (INBO)), Els Lommelen [ctb] (ORCID: <https://orcid.org/0000-0002-3481-5684>, affiliation: Research Institute for Nature and Forest (INBO)), Hans Van Calster [ctb] (ORCID: <https://orcid.org/0000-0001-8595-8426>, affiliation: Research Institute for Nature and Forest (INBO)), Research Institute for Nature and Forest (INBO) [cph, fnd, pbl] (ROR: <https://ror.org/00j54wy13>)",
       "Maintainer": "Thierry Onkelinx <thierry.onkelinx@inbo.be>"
