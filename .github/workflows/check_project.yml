@@ -8,15 +8,19 @@ name: check-project
 jobs:
   check-src:
     runs-on: ubuntu-24.04
-    name: "check project with checklist"
+    name: "Check project with checklist"
     env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      RSPM: "https://packagemanager.rstudio.com/cran/__linux__/noble/latest"
+      RSPM: "https://packagemanager.posit.co/cran/__linux__/noble/latest"
 
     permissions:
       contents: read
 
     steps:
-
       - name: "Check project with checklist"
         uses: inbo/actions/check_project@composite
+        with:
+          path: "."
+          extra_repositories: "https://cranhaven.r-universe.dev https://inbo.r-universe.dev"
+          apt: ""
