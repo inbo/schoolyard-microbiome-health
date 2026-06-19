@@ -61,7 +61,7 @@
     "INBOtheme": {
       "Package": "INBOtheme",
       "Version": "0.6.1",
-      "Source": "Repository",
+      "Source": "GitHub",
       "Type": "Package",
       "Title": "Themes for ggplot2",
       "Authors@R": "c( person(\"Thierry\", \"Onkelinx\", , \"thierry.onkelinx@inbo.be\", role = c(\"aut\", \"cre\"), comment = c(ORCID = \"0000-0001-8804-4216\", affiliation = \"Research Institute for Nature and Forest (INBO)\")), person(\"Oona\", \"Op de Weerdt\", role = \"ctb\"), person(\"Nicole\", \"De Groof\", , \"nicole.degroof@inbo.be\", role = \"ctb\", comment = c(ORCID = \"0000-0003-4305-9419\", affiliation = \"Research Institute for Nature and Forest (INBO)\")), person(\"Research Institute for Nature and Forest (INBO)\", , , \"info@inbo.be\", role = c(\"cph\", \"fnd\")) )",
@@ -70,7 +70,7 @@
       "URL": "https://inbo.github.io/INBOtheme/",
       "BugReports": "https://github.com/inbo/INBOtheme/issues",
       "Depends": [
-        "R (>= 4.1.0)"
+        "R (>= 3.5.0)"
       ],
       "Imports": [
         "assertthat",
@@ -95,10 +95,14 @@
       "LazyLoad": "yes",
       "Roxygen": "list(markdown = TRUE)",
       "RoxygenNote": "7.3.2",
-      "Repository": "https://inbo.r-universe.dev",
-      "NeedsCompilation": "no",
       "Author": "Thierry Onkelinx [aut, cre] (ORCID: <https://orcid.org/0000-0001-8804-4216>, affiliation: Research Institute for Nature and Forest (INBO)), Oona Op de Weerdt [ctb], Nicole De Groof [ctb] (ORCID: <https://orcid.org/0000-0003-4305-9419>, affiliation: Research Institute for Nature and Forest (INBO)), Research Institute for Nature and Forest (INBO) [cph, fnd]",
-      "Maintainer": "Thierry Onkelinx <thierry.onkelinx@inbo.be>"
+      "Maintainer": "Thierry Onkelinx <thierry.onkelinx@inbo.be>",
+      "RemoteType": "github",
+      "RemoteHost": "api.github.com",
+      "RemoteUsername": "inbo",
+      "RemoteRepo": "INBOtheme",
+      "RemoteRef": "main",
+      "RemoteSha": "278ce189737fb147819c5d14850579653ff0c768"
     },
     "Matrix": {
       "Package": "Matrix",
@@ -2525,7 +2529,7 @@
     "frictionless": {
       "Package": "frictionless",
       "Version": "1.2.1.9000",
-      "Source": "Repository",
+      "Source": "GitHub",
       "Title": "Read and Write Frictionless Data Packages",
       "Date": "2025-05-23",
       "Authors@R": "c( person(\"Peter\", \"Desmet\", , \"peter.desmet@inbo.be\", role = c(\"aut\", \"cre\"), comment = c(ORCID = \"0000-0002-8442-8025\", affiliation = \"Research Institute for Nature and Forest (INBO)\")), person(\"Damiano\", \"Oldoni\", , \"damiano.oldoni@inbo.be\", role = \"aut\", comment = c(ORCID = \"0000-0003-3445-7562\", affiliation = \"Research Institute for Nature and Forest (INBO)\")), person(\"Pieter\", \"Huybrechts\", , \"pieter.huybrechts@inbo.be\", role = \"aut\", comment = c(ORCID = \"0000-0002-6658-6062\", affiliation = \"Research Institute for Nature and Forest (INBO)\")), person(\"Sanne\", \"Govaert\", , \"sanne.govaert@inbo.be\", role = \"aut\", comment = c(ORCID = \"0000-0002-8939-1305\", affiliation = \"Research Institute for Nature and Forest (INBO)\")),        person(\"Kyle\", \"Husmann\", , \"kdh38@psu.edu\", role = \"ctb\", comment = c(ORCID = \"0000-0001-9875-8976\", affiliation = \"Pennsylvania State University\")), person(\"Research Institute for Nature and Forest (INBO)\", role = \"cph\", comment = c(ROR = \"00j54wy13\")), person(\"Research Foundation - Flanders\", role = \"fnd\", comment = \"https://lifewatch.be\"), person(\"Beatriz\", \"Milz\", , \"milz.bea@gmail.com\", role = \"rev\", comment = c(ORCID = \"0000-0002-3064-4486\")), person(\"João\", \"Martins\", , \"joao.martins@gmx.net\", role = \"rev\", comment = c(ORCID = \"0000-0001-7961-4280\")) )",
@@ -2561,13 +2565,17 @@
       "VignetteBuilder": "knitr",
       "Config/testthat/edition": "3",
       "Encoding": "UTF-8",
+      "LazyData": "true",
       "Roxygen": "list(markdown = TRUE)",
       "RoxygenNote": "7.3.3",
-      "Config/pak/sysreqs": "libssl-dev libx11-dev",
-      "Repository": "https://inbo.r-universe.dev",
-      "NeedsCompilation": "no",
       "Author": "Peter Desmet [aut, cre] (ORCID: <https://orcid.org/0000-0002-8442-8025>, affiliation: Research Institute for Nature and Forest (INBO)), Damiano Oldoni [aut] (ORCID: <https://orcid.org/0000-0003-3445-7562>, affiliation: Research Institute for Nature and Forest (INBO)), Pieter Huybrechts [aut] (ORCID: <https://orcid.org/0000-0002-6658-6062>, affiliation: Research Institute for Nature and Forest (INBO)), Sanne Govaert [aut] (ORCID: <https://orcid.org/0000-0002-8939-1305>, affiliation: Research Institute for Nature and Forest (INBO)), Kyle Husmann [ctb] (ORCID: <https://orcid.org/0000-0001-9875-8976>, affiliation: Pennsylvania State University), Research Institute for Nature and Forest (INBO) [cph] (ROR: <https://ror.org/00j54wy13>), Research Foundation - Flanders [fnd] (https://lifewatch.be), Beatriz Milz [rev] (ORCID: <https://orcid.org/0000-0002-3064-4486>), João Martins [rev] (ORCID: <https://orcid.org/0000-0001-7961-4280>)",
-      "Maintainer": "Peter Desmet <peter.desmet@inbo.be>"
+      "Maintainer": "Peter Desmet <peter.desmet@inbo.be>",
+      "RemoteType": "github",
+      "RemoteHost": "api.github.com",
+      "RemoteUsername": "frictionlessdata",
+      "RemoteRepo": "frictionless-r",
+      "RemoteRef": "main",
+      "RemoteSha": "6807f46e92b5f18b6e63ad5d7b80b5fe24fd8ddd"
     },
     "fs": {
       "Package": "fs",
