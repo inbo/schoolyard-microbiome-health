@@ -36,3 +36,5 @@
 <!-- description: start -->
 Code and supplementary data for the paper: Environmental bacteria link green schoolyards to better child well-being and fewer allergy symptoms.
 <!-- description: end -->
+
+To reproduce the analyses, follow instructions in the R script located at `source/reproduce.R`.

@@ -1,3 +1,10 @@
+# We assume you have a local clone of
+# https://github.com/inbo/schoolyard-microbiome-health.git
+# and your working directory should be the folder containing the
+# schoolyard-microbiome-health.Rproj file.
+# If you are using RStudio and started the project by opening this file with
+# RStudio, your working directory will be correct.
+
 if (!"renv" %in% rownames(installed.packages())) {
   install.packages("renv")
 }
@@ -14,9 +21,12 @@ if (!rmarkdown::pandoc_available()) {
   cat("Please install a recent pandoc version")
 }
 
+# check working directory
+library(here)
+stopifnot(file.exists(here("schoolyard-microbiome-health.Rproj")))
+
 # download the zenodo deposit (dataset)
 library(frictionless)
-library(here)
 source(here("source", "download_zenodo.R"))
 
 download_zenodo(
@@ -32,11 +42,11 @@ utils::unzip(here("data", "data_packages.zip"), exdir = here("data"))
 # this will take a while the first time (1-2 hours)
 # model objects are saved as rds files and the report will be rendered to html
 # the latter will be saved in a folder ./output
-if (!dir.exists(here::here("output"))) {
-  dir.create(here::here("output"))
+if (!dir.exists(here("output"))) {
+  dir.create(here("output"))
 }
 
 rmarkdown::render(
-  input = here::here("source", "schoolyard_microbiome_health.Rmd"),
-  output_dir = here::here("output")
+  input = here("source", "schoolyard_microbiome_health.Rmd"),
+  output_dir = here("output")
 )
