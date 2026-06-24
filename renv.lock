@@ -1231,9 +1231,9 @@
       "RemoteHost": "api.github.com",
       "RemoteRepo": "checklist",
       "RemoteUsername": "inbo",
-      "RemotePkgRef": "inbo/checklist@0.5.4",
-      "RemoteRef": "0.5.4",
-      "RemoteSha": "bbfad2905d5bf9dd7659a28507b33d05650fac93",
+      "RemotePkgRef": "inbo/checklist",
+      "RemoteRef": "HEAD",
+      "RemoteSha": "4d2e67c996a3252c1c0390bce7cd49481dd34f96",
       "NeedsCompilation": "no",
       "Author": "Thierry Onkelinx [aut, cre] (ORCID: <https://orcid.org/0000-0001-8804-4216>, affiliation: Research Institute for Nature and Forest (INBO)), Els Lommelen [ctb] (ORCID: <https://orcid.org/0000-0002-3481-5684>, affiliation: Research Institute for Nature and Forest (INBO)), Hans Van Calster [ctb] (ORCID: <https://orcid.org/0000-0001-8595-8426>, affiliation: Research Institute for Nature and Forest (INBO)), Research Institute for Nature and Forest (INBO) [cph, fnd, pbl] (ROR: <https://ror.org/00j54wy13>)",
       "Maintainer": "Thierry Onkelinx <thierry.onkelinx@inbo.be>"
