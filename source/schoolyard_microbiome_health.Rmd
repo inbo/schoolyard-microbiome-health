@@ -2191,7 +2191,6 @@ slope_drw <- expand_grid(
       + drw$`bsp_rhinitis01_mises_mean:school_contextgreen`,
       landscape_type == "urban" & school_context == "green" & response == "wheezing" ~
         drw$bsp_wheezing01_mises_mean 
-      + drw$`bsp_wheezing01_mises_mean:landscape_typeurban`
       + drw$`bsp_wheezing01_mises_mean:school_contextgreen`,
       landscape_type == "urban" & school_context == "non-green" & response == "eczema" ~
         drw$bsp_eczema01_mises_mean,
