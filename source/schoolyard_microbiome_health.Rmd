@@ -2539,7 +2539,9 @@ slopes_drw |>
 slope_differences_drw <- slope_drw |>
   group_by(response, landscape_type, effect) |>
   summarise(
-    slope_difference = slope[school_context == "green"] - slope[school_context == "non-green"]
+    slope_difference = slope[school_context == "green"] -
+      slope[school_context == "non-green"],
+    .groups = "drop_last"
   ) |> 
   mutate(
     difference = "green - non-green"
