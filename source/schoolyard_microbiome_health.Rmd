@@ -89,13 +89,14 @@ school_colours <- c(
   `green` = "#40B0A6",
   `non-green` = "#E1BE6A"
 )
+landscape_colours <- c(rural = "cadetblue", urban = "sienna")
 ```
 
 # Data preparation
 
 ::: {.warning}
 **Warning:** This document contains the analysis pipeline that was used for the paper _Environmental bacteria link green schoolyards to better child well-being and fewer allergy symptoms_.
-While the code is identical, the data used in this document is a (large) subset of the data used in the paper.
+While the code is identical, the data used in this document (513 participants) is a (large) subset of the data used in the paper (529 participants).
 The reason for this is that some participants / parents did not give consent for long-term storage / archiving of their data.
 As such, we had permission to use their data in publications, but not to publish their data in a long-term public archive.
 The data used in this repository, which are downloaded from <https://doi.org/10.5281/zenodo.10527033> (see `source/reproduce.R`), therefore only include data from participants / parents that gave consent for long-term storage of their data.
@@ -385,6 +386,7 @@ health_data <- health_data |>
 ## School and participant characteristics
 
 A total of 167 schools were contacted out of which 40 expressed interest to participate and 37 participated; these 37 schools had 929 children in the fifth grade out of which 527 children (57%) gave consent to participate in at least one of the tests (Fig. \@ref(fig:flowcharts)).
+In addition, 16 children did not give consent for long-term archiving of data.
 
 (ref:flowcharts) Flowchart depicting the number of schools that were contacted, interested and participated (left-side, and the number of fifth grade children that gave consent and for which at least one test was available (right-side).
 
@@ -397,11 +399,29 @@ knitr::include_graphics(
 
 Low naturalness landscape schools were typically found in urbanized areas and characterized by high levels of impervious surfaces and low levels of combined forest and grassland cover.
 High naturalness landscape schools were found in rural areas with low levels of impervious surfaces and high levels of combined forest and grassland cover.
+We will henceforth refer to these as schools in urban or rural landscapes.
+
+```{r relabel}
+health_data <- health_data |>
+  mutate(
+    school_context = factor(
+      school_context,
+      levels = c("low greenness", "high greenness"),
+      labels = c("non-green", "green")
+      ),
+    landscape_type = factor(
+      landscape_type,
+      levels = c("low naturalness", "high naturalness"),
+      labels = c("urban", "rural")
+      )
+  )
+```
+
 
 ## Descriptive statistics of the study population
 
 Table \@ref(tab:table1) shows descriptive statistics of the main variables in our sample.
-The number of participating children in schools labelled as 'low greenness' is about 1.5 times higher compared to those in 'high greenness' schools.
+The number of participating children in schools labelled as 'non-green' is about 1.5 times higher compared to those in 'green' schools.
 
 (ref:table1) Description of main characteristics of the study population. *N* is the number of children.
 
@@ -545,13 +565,26 @@ health_data |>
     values_to = "value"
   ) |>
   mutate(
-    school_context = factor(
-      school_context,
-      levels = c("low greenness", "high greenness"),
-      labels = c("non-green", "green")
+    context = recode_values(
+      covariate,
+        "ses_mean" ~ "school",
+        "ses_centered" ~ "home",
+        "pm25" ~ "school",
+        "natural_elements_score" ~ "school",
+        "nature_connectedness" ~ "child",
+        "garden_score" ~ "home",
+        "mean_log_sirm" ~ "school",
+        "inverse_simpson_skin" ~ "child",
+        "invsimpson_dust" ~ "school",
+        "invsimpson_plant" ~ "school",
+        "invsimpson_soil" ~ "school",
+        "sum_contact_animals" ~ "home",
+        "allergies_family"   ~ "home"
     )
   ) |>
   filter(!is.na(value), !is.na(biological_sex)) |>
+  arrange(context, covariate) |> 
+  mutate(facetvar = paste0(context, " - ", covariate)) |> 
   ggplot() +
   stat_sum(
     aes(
@@ -565,7 +598,7 @@ health_data |>
   ) +
   scale_colour_manual(values = school_colours) +
   facet_wrap(
-    ~ covariate |> str_replace_all("_", " ") |> str_wrap(15),
+    ~ facetvar |> str_replace_all("_", " ") |> str_wrap(15),
     scales = "free_y") +
   theme(legend.position = "top") +
   guides(
@@ -671,7 +704,8 @@ mv_adj_mi_ks <- brm(
     file_refit = "on_change",
     file = file.path(
       model_folder,
-      "mv_adj_mi_ks")
+      "mv_adj_mi_ks"
+    )
 )
 ```
 
@@ -718,8 +752,8 @@ mcmc_df <- mcmc_df |>
     grepl("^(b|bsp)_tscore", parameter)
   ) |>  mutate(
     parameter = gsub("^(b|bsp)_tscore", "", parameter),
-    parameter = gsub("landscape_typehighnaturalness", "Rural", parameter),
-    parameter = gsub("school_contexthighgreenness", "Green schoolyard", parameter),
+    parameter = gsub("landscape_typerural", "Rural", parameter),
+    parameter = gsub("school_contextgreen", "Green schoolyard", parameter),
     parameter = gsub("biological_sexFemale", "Biological sex - girl", parameter),
     parameter = gsub("natural_elements_score", "Natural elements score", parameter),
     parameter = gsub("mises_centered", "Deviation school SES", parameter),
@@ -739,8 +773,8 @@ ks_alldata <- mcmc_intervals_data(
 ) |> 
   mutate(
     parameter = gsub("^(b|bsp)_tscore", "", parameter),
-    parameter = gsub("landscape_typehighnaturalness", "Rural", parameter),
-    parameter = gsub("school_contexthighgreenness", "Green schoolyard", parameter),
+    parameter = gsub("landscape_typerural", "Rural", parameter),
+    parameter = gsub("school_contextgreen", "Green schoolyard", parameter),
     parameter = gsub("biological_sexFemale", "Biological sex - girl", parameter),
     parameter = gsub("natural_elements_score", "Natural elements score", parameter),
     parameter = gsub("mises_centered", "Deviation school SES", parameter),
@@ -843,16 +877,6 @@ preds_df <- map2_dfr(
 
 preds_df <- preds_df |>
   mutate(
-    landscape_type = factor(
-      landscape_type,
-      levels = c("low naturalness", "high naturalness"),
-      labels = c("urban", "rural")
-    ),
-    school_context = factor(
-      school_context,
-      levels = c("low greenness", "high greenness"),
-      labels = c("non-green", "green")
-    ),
     response = factor(
       response,
       levels = kidscreen_groups$level,
@@ -924,16 +948,6 @@ preds_df <- preds_df |>
 
 preds_df <- preds_df |>
   mutate(
-    landscape_type = factor(
-      landscape_type,
-      levels = c("low naturalness", "high naturalness"),
-      labels = c("urban", "rural")
-    ),
-    school_context = factor(
-      school_context,
-      levels = c("low greenness", "high greenness"),
-      labels = c("non-green", "green")
-    ),
     response = factor(
       response,
       levels = kidscreen_groups$level,
@@ -987,7 +1001,7 @@ refgrid1 <- emmeans::ref_grid(
   mv_adj_mi_ks,
   at = list(
     ses_mean = median(mv_adj_mi_ks$data$ses_mean, na.rm = TRUE),
-    landscape_type = c("low naturalness", "high naturalness"),
+    landscape_type = c("urban", "rural"),
     rep.meas = c("tscorephy", "tscorepwb", "tscorepar", "tscoresoc", "tscoresch")
   )
 )
@@ -1056,16 +1070,6 @@ preds_df_ses_sc <- preds_df_ses_sc |>
   
 preds_df_ses_sc <- preds_df_ses_sc |>
   mutate(
-    landscape_type = factor(
-      landscape_type,
-      levels = c("low naturalness", "high naturalness"),
-      labels = c("urban", "rural")
-    ),
-    school_context = factor(
-      school_context,
-      levels = c("low greenness", "high greenness"),
-      labels = c("non-green", "green")
-    ),
     response = factor(
       response,
       levels = kidscreen_groups$level,
@@ -1130,16 +1134,6 @@ preds_df_ses_lt <- preds_df_ses_lt |>
   
 preds_df_ses_lt <- preds_df_ses_lt |>
   mutate(
-    landscape_type = factor(
-      landscape_type,
-      levels = c("low naturalness", "high naturalness"),
-      labels = c("urban", "rural")
-    ),
-    school_context = factor(
-      school_context,
-      levels = c("low greenness", "high greenness"),
-      labels = c("non-green", "green")
-    ),
     response = factor(
       response,
       levels = kidscreen_groups$level,
@@ -1148,7 +1142,6 @@ preds_df_ses_lt <- preds_df_ses_lt |>
   ) |>
   as_tibble()
 
-landscape_colours <- c(rural = "cadetblue", urban = "sienna")
 
 p_ks_ses_lt <- preds_df_ses_lt |>
   ggplot() +
@@ -1226,16 +1219,6 @@ preds_df_ses_sc_lt <- preds_df_ses_sc_lt |>
     ses_mean <= max_ses_mean
   ) |>
   mutate(
-    landscape_type = factor(
-      landscape_type,
-      levels = c("low naturalness", "high naturalness"),
-      labels = c("urban", "rural")
-    ),
-    school_context = factor(
-      school_context,
-      levels = c("low greenness", "high greenness"),
-      labels = c("non-green", "green")
-    ),
     response = factor(
       response,
       levels = kidscreen_groups$level,
@@ -1309,16 +1292,6 @@ confint(emt) |>
   inner_join(pvals_emt) |>
   filter(grepl("^tscore", rep.meas)) |>
   mutate(
-    landscape_type = factor(
-      landscape_type,
-      levels = c("low naturalness", "high naturalness"),
-      labels = c("urban", "rural")
-    ),
-    school_context = factor(
-      school_context,
-      levels = c("low greenness", "high greenness"),
-      labels = c("non-green", "green")
-    ),
     response = factor(
       rep.meas,
       levels = kidscreen_groups$level,
@@ -1335,7 +1308,7 @@ refgrid1 <- emmeans::ref_grid(
   mv_adj_mi_ks,
   at = list(
     ses_mean = seq(0.4, 0.7, 0.1),
-    landscape_type = c("low naturalness", "high naturalness"),
+    landscape_type = c("urban", "rural"),
     rep.meas = c("tscorephy", "tscorepwb", "tscorepar", "tscoresoc", "tscoresch")
   )
 )
@@ -1368,16 +1341,6 @@ confint(contr) |>
   as_tibble() |>
   inner_join(pvals) |> 
     mutate(
-    landscape_type = factor(
-      landscape_type,
-      levels = c("low naturalness", "high naturalness"),
-      labels = c("urban", "rural")
-    ),
-    contrast = factor(
-      contrast,
-      levels = c("high greenness - low greenness"),
-      labels = c("green - non-green")
-    ),
     response = factor(
       rep.meas,
       levels = kidscreen_groups$level,
@@ -1634,8 +1597,8 @@ isaac_alldata <- isaac_alldata |>
   mutate(
     response = stringr::str_extract(string = parameter, "^(b|bsp)_(.+)01_", group = 2),
     parameter = gsub("^(b|bsp)_(.+)01_", "", parameter),
-    parameter = gsub("landscape_typehighnaturalness", "Rural", parameter),
-    parameter = gsub("school_contexthighgreenness", "Green schoolyard", parameter),
+    parameter = gsub("landscape_typerural", "Rural", parameter),
+    parameter = gsub("school_contextgreen", "Green schoolyard", parameter),
     parameter = gsub("biological_sexFemale", "Biological sex - girl", parameter),
     parameter = gsub("natural_elements_score", "Natural elements score", parameter),
     parameter = gsub("mises_centered", "Deviation school SES", parameter),
@@ -1740,16 +1703,6 @@ preds_df <- map2_dfr(
 
 preds_df <- preds_df |>
   mutate(
-    landscape_type = factor(
-      landscape_type,
-      levels = c("low naturalness", "high naturalness"),
-      labels = c("urban", "rural")
-    ),
-    school_context = factor(
-      school_context,
-      levels = c("low greenness", "high greenness"),
-      labels = c("non-green", "green")
-    ),
     response = factor(
       response,
       levels = c("rhinitis01", "wheezing01", "eczema01"),
@@ -1824,16 +1777,6 @@ preds_df <- preds_df |>
 
 preds_df <- preds_df |>
   mutate(
-    landscape_type = factor(
-      landscape_type,
-      levels = c("low naturalness", "high naturalness"),
-      labels = c("urban", "rural")
-    ),
-    school_context = factor(
-      school_context,
-      levels = c("low greenness", "high greenness"),
-      labels = c("non-green", "green")
-    ),
     response = factor(
       response,
       levels = c("rhinitis01", "wheezing01", "eczema01"),
@@ -1895,9 +1838,9 @@ ses_ranges_landscape <- ses_ranges |>
 #brms' emmeans support for multivariate models is limited to cases where all univariate models have the same family.
 # instead calc manually
 nd <- expand.grid(
-  school_context = c("low greenness", "high greenness"),
+  school_context = c("non-green", "green"),
   ses_mean = median(mv_adj_mi_isaac_ses_skin$data$ses_mean, na.rm = TRUE),
-  landscape_type = c("low naturalness", "high naturalness")
+  landscape_type = c("urban", "rural")
 ) |>
   mutate(
     biological_sex = "Male",
@@ -1939,18 +1882,6 @@ pe <- tidybayes::add_linpred_rvars(
 
 # calculate risk ratio
 pe <- pe |>
-  mutate(
-    school_context = factor(
-      school_context,
-      levels = c("low greenness", "high greenness"),
-      labels = c("non-green", "green") 
-    ),
-    landscape_type = factor(
-      landscape_type,
-      levels = c("low naturalness", "high naturalness"),
-      labels = c("urban", "rural")
-    )
-  ) |>
   select(
     landscape_type, school_context, .linpred
   ) |> 
@@ -2028,16 +1959,6 @@ preds_df_ses_sc <- preds_df_ses_sc |>
   
 preds_df_ses_sc <- preds_df_ses_sc |>
   mutate(
-    landscape_type = factor(
-      landscape_type,
-      levels = c("low naturalness", "high naturalness"),
-      labels = c("urban", "rural")
-    ),
-    school_context = factor(
-      school_context,
-      levels = c("low greenness", "high greenness"),
-      labels = c("non-green", "green")
-    ),
     response = factor(
       response,
       levels = c("rhinitis01", "wheezing01", "eczema01"),
@@ -2102,16 +2023,6 @@ preds_df_ses_lt <- preds_df_ses_lt |>
   
 preds_df_ses_lt <- preds_df_ses_lt |>
   mutate(
-    landscape_type = factor(
-      landscape_type,
-      levels = c("low naturalness", "high naturalness"),
-      labels = c("urban", "rural")
-    ),
-    school_context = factor(
-      school_context,
-      levels = c("low greenness", "high greenness"),
-      labels = c("non-green", "green")
-    ),
     response = factor(
       response,
       levels = c("rhinitis01", "wheezing01", "eczema01"),
@@ -2192,16 +2103,6 @@ preds_df_ses_sc_lt <- preds_df_ses_sc_lt |>
     ses_mean <= max_ses_mean
   ) |>
   mutate(
-    landscape_type = factor(
-      landscape_type,
-      levels = c("low naturalness", "high naturalness"),
-      labels = c("urban", "rural")
-    ),
-    school_context = factor(
-      school_context,
-      levels = c("low greenness", "high greenness"),
-      labels = c("non-green", "green")
-    ),
     response = factor(
       response,
       levels = c("rhinitis01", "wheezing01", "eczema01"),
@@ -2263,35 +2164,35 @@ slope_drw <- expand_grid(
     slope = case_when(
       landscape_type == "rural" & school_context == "green" & response == "eczema" ~
         drw$bsp_eczema01_mises_mean 
-      + drw$`bsp_eczema01_mises_mean:landscape_typehighnaturalness`
-      + drw$`bsp_eczema01_mises_mean:school_contexthighgreenness`,
+      + drw$`bsp_eczema01_mises_mean:landscape_typerural`
+      + drw$`bsp_eczema01_mises_mean:school_contextgreen`,
       landscape_type == "rural" & school_context == "green" & response == "rhinitis" ~
         drw$bsp_rhinitis01_mises_mean 
-      + drw$`bsp_rhinitis01_mises_mean:landscape_typehighnaturalness`
-      + drw$`bsp_rhinitis01_mises_mean:school_contexthighgreenness`,
+      + drw$`bsp_rhinitis01_mises_mean:landscape_typerural`
+      + drw$`bsp_rhinitis01_mises_mean:school_contextgreen`,
       landscape_type == "rural" & school_context == "green" & response == "wheezing" ~
         drw$bsp_wheezing01_mises_mean 
-      + drw$`bsp_wheezing01_mises_mean:landscape_typehighnaturalness`
-      + drw$`bsp_wheezing01_mises_mean:school_contexthighgreenness`,
+      + drw$`bsp_wheezing01_mises_mean:landscape_typerural`
+      + drw$`bsp_wheezing01_mises_mean:school_contextgreen`,
       landscape_type == "rural" & school_context == "non-green" & response == "eczema" ~
         drw$bsp_eczema01_mises_mean 
-      + drw$`bsp_eczema01_mises_mean:landscape_typehighnaturalness`,
+      + drw$`bsp_eczema01_mises_mean:landscape_typerural`,
       landscape_type == "rural" & school_context == "non-green" & response == "rhinitis" ~
         drw$bsp_rhinitis01_mises_mean 
-      + drw$`bsp_rhinitis01_mises_mean:landscape_typehighnaturalness`,
+      + drw$`bsp_rhinitis01_mises_mean:landscape_typerural`,
       landscape_type == "rural" & school_context == "non-green" & response == "wheezing" ~
         drw$bsp_wheezing01_mises_mean 
-      + drw$`bsp_wheezing01_mises_mean:landscape_typehighnaturalness`,
+      + drw$`bsp_wheezing01_mises_mean:landscape_typerural`,
       landscape_type == "urban" & school_context == "green" & response == "eczema" ~
         drw$bsp_eczema01_mises_mean 
-      + drw$`bsp_eczema01_mises_mean:school_contexthighgreenness`,
+      + drw$`bsp_eczema01_mises_mean:school_contextgreen`,
       landscape_type == "urban" & school_context == "green" & response == "rhinitis" ~
         drw$bsp_rhinitis01_mises_mean 
-      + drw$`bsp_rhinitis01_mises_mean:school_contexthighgreenness`,
+      + drw$`bsp_rhinitis01_mises_mean:school_contextgreen`,
       landscape_type == "urban" & school_context == "green" & response == "wheezing" ~
         drw$bsp_wheezing01_mises_mean 
-      + drw$`bsp_wheezing01_mises_mean:landscape_typehighnaturalness`
-      + drw$`bsp_wheezing01_mises_mean:school_contexthighgreenness`,
+      + drw$`bsp_wheezing01_mises_mean:landscape_typeurban`
+      + drw$`bsp_wheezing01_mises_mean:school_contextgreen`,
       landscape_type == "urban" & school_context == "non-green" & response == "eczema" ~
         drw$bsp_eczema01_mises_mean,
       landscape_type == "urban" & school_context == "non-green" & response == "rhinitis" ~
@@ -2338,9 +2239,9 @@ ses_ranges_landscape <- ses_ranges |>
 
 # semi-manual check if emmeans (next chunk) does what it needs to do
 nd <- expand.grid(
-  school_context = c("low greenness", "high greenness"),
+  school_context = c("non-green", "green"),
   ses_mean = seq(0.4, 0.8, 0.02),
-  landscape_type = c("low naturalness", "high naturalness")
+  landscape_type = c("urban", "rural")
 ) |>
   mutate(
     biological_sex = "Male",
@@ -2427,11 +2328,6 @@ pe <- pe |>
       allergy,
       levels = c("rhinitis01", "wheezing01", "eczema01"),
       labels = c("rhinitis", "wheezing", "eczema")
-    ),
-    landscape_type = factor(
-      landscape_type,
-      levels = c("low naturalness", "high naturalness"),
-      labels = c("urban", "rural")
     )
   ) 
 
@@ -2480,16 +2376,6 @@ preds_df_skindiv_sc_lt <- map2_dfr(
 
 preds_df_skindiv_sc_lt <- preds_df_skindiv_sc_lt |>
   mutate(
-    landscape_type = factor(
-      landscape_type,
-      levels = c("low naturalness", "high naturalness"),
-      labels = c("urban", "rural")
-    ),
-    school_context = factor(
-      school_context,
-      levels = c("low greenness", "high greenness"),
-      labels = c("non-green", "green")
-    ),
     response = factor(
       response,
       levels = c("rhinitis01", "wheezing01", "eczema01"),
@@ -2552,15 +2438,15 @@ slope_drw <- expand_grid(
       landscape_type == "rural"  & school_context == "non-green" &
         response == "eczema" & effect == "skin" ~
         drw$bsp_eczema01_milog_inverse_simpson_skin 
-      + drw$`bsp_eczema01_milog_inverse_simpson_skin:landscape_typehighnaturalness`,
+      + drw$`bsp_eczema01_milog_inverse_simpson_skin:landscape_typerural`,
       landscape_type == "rural"  & school_context == "non-green" &
         response == "rhinitis" & effect == "skin"  ~
         drw$bsp_rhinitis01_milog_inverse_simpson_skin 
-      + drw$`bsp_rhinitis01_milog_inverse_simpson_skin:landscape_typehighnaturalness`,
+      + drw$`bsp_rhinitis01_milog_inverse_simpson_skin:landscape_typerural`,
       landscape_type == "rural"  & school_context == "non-green" &
         response == "wheezing" & effect == "skin"  ~
         drw$bsp_wheezing01_milog_inverse_simpson_skin 
-      + drw$`bsp_wheezing01_milog_inverse_simpson_skin:landscape_typehighnaturalness`,
+      + drw$`bsp_wheezing01_milog_inverse_simpson_skin:landscape_typerural`,
       landscape_type == "urban"  & school_context == "non-green" 
       & response == "eczema" & effect == "skin"  ~
         drw$bsp_eczema01_milog_inverse_simpson_skin,
@@ -2573,30 +2459,30 @@ slope_drw <- expand_grid(
       landscape_type == "rural"  & school_context == "green" &
         response == "eczema" & effect == "skin" ~
         drw$bsp_eczema01_milog_inverse_simpson_skin 
-      + drw$`bsp_eczema01_milog_inverse_simpson_skin:landscape_typehighnaturalness`
-      + drw$`bsp_eczema01_milog_inverse_simpson_skin:school_contexthighgreenness`,
+      + drw$`bsp_eczema01_milog_inverse_simpson_skin:landscape_typerural`
+      + drw$`bsp_eczema01_milog_inverse_simpson_skin:school_contextgreen`,
       landscape_type == "rural"  & school_context == "green" &
         response == "rhinitis" & effect == "skin"  ~
         drw$bsp_rhinitis01_milog_inverse_simpson_skin 
-      + drw$`bsp_rhinitis01_milog_inverse_simpson_skin:landscape_typehighnaturalness`
-      + drw$`bsp_rhinitis01_milog_inverse_simpson_skin:school_contexthighgreenness`,
+      + drw$`bsp_rhinitis01_milog_inverse_simpson_skin:landscape_typerural`
+      + drw$`bsp_rhinitis01_milog_inverse_simpson_skin:school_contextgreen`,
       landscape_type == "rural"  & school_context == "green" &
         response == "wheezing" & effect == "skin"  ~
         drw$bsp_wheezing01_milog_inverse_simpson_skin 
-      + drw$`bsp_wheezing01_milog_inverse_simpson_skin:landscape_typehighnaturalness`
-      + drw$`bsp_wheezing01_milog_inverse_simpson_skin:school_contexthighgreenness`,
+      + drw$`bsp_wheezing01_milog_inverse_simpson_skin:landscape_typerural`
+      + drw$`bsp_wheezing01_milog_inverse_simpson_skin:school_contextgreen`,
       landscape_type == "urban"  & school_context == "green" 
       & response == "eczema" & effect == "skin"  ~
         drw$bsp_eczema01_milog_inverse_simpson_skin
-      + drw$`bsp_eczema01_milog_inverse_simpson_skin:school_contexthighgreenness`,
+      + drw$`bsp_eczema01_milog_inverse_simpson_skin:school_contextgreen`,
       landscape_type == "urban"  & school_context == "green" 
       & response == "rhinitis" & effect == "skin"  ~
         drw$bsp_rhinitis01_milog_inverse_simpson_skin
-      + drw$`bsp_rhinitis01_milog_inverse_simpson_skin:school_contexthighgreenness`,
+      + drw$`bsp_rhinitis01_milog_inverse_simpson_skin:school_contextgreen`,
       landscape_type == "urban" & school_context == "green" 
       & response == "wheezing" & effect == "skin"  ~
         drw$bsp_wheezing01_milog_inverse_simpson_skin
-      + drw$`bsp_wheezing01_milog_inverse_simpson_skin:school_contexthighgreenness`
+      + drw$`bsp_wheezing01_milog_inverse_simpson_skin:school_contextgreen`
     )      
   )
 
@@ -2802,8 +2688,8 @@ saveRDS(
 nd <- expand.grid(
   biological_sex = c("Male", "Female")) |>
   mutate(
-    school_context = "low greenness",
-    landscape_type = "low naturalness",
+    school_context = "non-green",
+    landscape_type = "urban",
     f_allergies_family = "no",
     ses_centered = 0,
     ses_mean = mean(health_data$ses_mean, na.rm = TRUE) |> round(2),
@@ -3059,8 +2945,8 @@ isaac_alldata <- isaac_alldata |>
   mutate(
     response = stringr::str_extract(string = parameter, "^(b|bsp)_(.+)_", group = 2),
     parameter = gsub("^(b|bsp)_inversesimpsonskin_", "", parameter),
-    parameter = gsub("landscape_typehighnaturalness", "Rural", parameter),
-    parameter = gsub("school_contexthighgreenness", "Green schoolyard", parameter),
+    parameter = gsub("landscape_typerural", "Rural", parameter),
+    parameter = gsub("school_contextgreen", "Green schoolyard", parameter),
     parameter = gsub("natural_elements_score", "Natural elements score", parameter),
     parameter = gsub("migarden_score", "Garden score", parameter),
     parameter = gsub("mimean_log_sirm", "Local air pollution", parameter),
@@ -3155,16 +3041,6 @@ preds_df <- map2_dfr(
 
 preds_df <- preds_df |>
   mutate(
-    landscape_type = factor(
-      landscape_type,
-      levels = c("low naturalness", "high naturalness"),
-      labels = c("urban", "rural")
-    ),
-    school_context = factor(
-      school_context,
-      levels = c("low greenness", "high greenness"),
-      labels = c("non-green", "green")
-    ),
     response = factor(
       response,
       levels = c("rhinitis01", "wheezing01", "eczema01"),
@@ -3207,8 +3083,8 @@ We can calculate post-hoc comparison, stratified by landscape type to see if sch
 #Error : brms' emmeans support for multivariate models is limited to cases where all univariate models have the same family.
 # instead calc manually
 nd <- expand.grid(
-  school_context = c("low greenness", "high greenness"),
-  landscape_type = c("low naturalness", "high naturalness")
+  school_context = c("non-green", "green"),
+  landscape_type = c("urban", "rural")
 ) |>
   mutate(
     garden_score = mean(health_data$garden_score, na.rm = TRUE) |> round(2),
@@ -3237,18 +3113,6 @@ pe <- tidybayes::add_linpred_rvars(
 )
 
 pe <- pe |>
-  mutate(
-    school_context = factor(
-      school_context,
-      levels = c("low greenness", "high greenness"),
-      labels = c("non-green", "green") 
-    ),
-    landscape_type = factor(
-      landscape_type,
-      levels = c("low naturalness", "high naturalness"),
-      labels = c("urban", "rural")
-    )
-  ) |>
   select(
     landscape_type, school_context, .linpred
   ) |> 
