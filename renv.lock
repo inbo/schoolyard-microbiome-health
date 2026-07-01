@@ -1283,7 +1283,7 @@
     },
     "citeme": {
       "Package": "citeme",
-      "Version": "0.1.2",
+      "Version": "0.1.4",
       "Source": "GitHub",
       "Title": "Manage Person and Organisation Information",
       "Authors@R": "c( person(\"Thierry\", \"Onkelinx\", , \"thierry.onkelinx@inbo.be\", role = c(\"aut\", \"cre\"), comment = c(ORCID = \"0000-0001-8804-4216\", affiliation = \"Research Institute for Nature and Forest (INBO)\")), person(\"Research Institute for Nature and Forest (INBO)\", , , \"info@inbo.be\", role = c(\"cph\", \"fnd\", \"pbl\"), comment = c(ROR = \"00j54wy13\")) )",
@@ -1308,6 +1308,7 @@
       "Suggests": [
         "mockery",
         "quarto",
+        "rmarkdown",
         "testthat (>= 3.0.0)"
       ],
       "VignetteBuilder": "quarto",
@@ -1318,16 +1319,14 @@
       "Encoding": "UTF-8",
       "Language": "en-GB",
       "Roxygen": "list(markdown = TRUE)",
+      "Author": "Thierry Onkelinx [aut, cre] (ORCID: <https://orcid.org/0000-0001-8804-4216>, affiliation: Research Institute for Nature and Forest (INBO)), Research Institute for Nature and Forest (INBO) [cph, fnd, pbl] (ROR: <https://ror.org/00j54wy13>)",
+      "Maintainer": "Thierry Onkelinx <thierry.onkelinx@inbo.be>",
       "RemoteType": "github",
       "RemoteHost": "api.github.com",
-      "RemoteRepo": "citeme",
       "RemoteUsername": "inbo",
-      "RemotePkgRef": "inbo/citeme",
-      "RemoteRef": "HEAD",
-      "RemoteSha": "8945b29598ad50fab7e5b11b6b690a7bff035e55",
-      "NeedsCompilation": "no",
-      "Author": "Thierry Onkelinx [aut, cre] (ORCID: <https://orcid.org/0000-0001-8804-4216>, affiliation: Research Institute for Nature and Forest (INBO)), Research Institute for Nature and Forest (INBO) [cph, fnd, pbl] (ROR: <https://ror.org/00j54wy13>)",
-      "Maintainer": "Thierry Onkelinx <thierry.onkelinx@inbo.be>"
+      "RemoteRepo": "citeme",
+      "RemoteRef": "main",
+      "RemoteSha": "b107ca1ee476082e0edcb4f49e94244fe0e4da93"
     },
     "cli": {
       "Package": "cli",
