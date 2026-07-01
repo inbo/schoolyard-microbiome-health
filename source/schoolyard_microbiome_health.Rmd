@@ -2799,7 +2799,7 @@ saveRDS(
 
 ## Number of allergic sensitizations (ISAAC survey data)
 
-```{r adj-mi-nisaac}
+```{r adj-mi-nisaac, warning = FALSE}
 priors <- set_prior(
   prior = "normal(0,1)",
   class = "b", 
@@ -2855,7 +2855,7 @@ mv_adj_mi_nisaac <- brm(
 
 ```
 
-```{r summary-nisaac}
+```{r summary-nisaac, warning=FALSE}
 pvals <- pd(mv_adj_mi_nisaac) %>%
   as_tibble() %>%
   separate_wider_delim(
