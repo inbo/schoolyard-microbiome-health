@@ -3024,6 +3024,91 @@ saveRDS(
 
 ```
 
+Figure \@ref(fig:adj-mi-nisaac-preds-sclt-school-effects)
+
+(ref:adj-mi-nisaac-preds-sclt-school-effects) Predicted number of allergenic sensitizations for each school as a function of landscape type and schoolyard. The centrality measure is the median and the line intervals correspond to 95% credible intervals. 
+
+```{r adj-mi-nisaac-preds-sclt-school-effects, fig.cap = "(ref:adj-mi-nisaac-preds-sclt-school-effects)"}
+preds <- conditional_effects(
+  mv_adj_mi_nisaac,
+  effects = "school_id",
+  conditions = make_conditions(
+    mv_adj_mi_nisaac, vars = c("landscape_type", "school_context")
+  ),
+  resp = c("nsensitive"),
+  re_formula = NULL
+  )
+
+preds_df <- map2_dfr(
+  preds,
+  names(preds),
+  function(x, y) {
+    response <- stringr::str_extract(y, "^\\w*")
+    x$response <- response
+    x
+  }
+)
+
+# filter out the actual types to which a school belongs
+school_cats <- health_data |>
+  distinct(school_id, landscape_type, school_context)
+preds_df <- preds_df |>
+  semi_join(
+    school_cats,
+    by = join_by(school_id, landscape_type, school_context)
+  )
+
+
+preds_df <- preds_df |>
+  mutate(
+    response = factor(
+      response,
+      levels = c("nsensitive"),
+      labels = c("Number of allergenic sensitizations")
+    )
+  ) |>
+  as_tibble()
+
+p_nisaac_ltsc_schooleffects <- preds_df |>
+  # Group by the facet and x-axis variable
+  group_by(response, landscape_type) |> 
+  # Sort ascending by estimate__ (per your request)
+  arrange(desc(estimate__)) |> 
+  # Create a local rank for the dodging order
+  mutate(dodge_rank = factor(row_number())) |> 
+  ungroup() |> 
+  ggplot() +
+  geom_pointrange(
+    aes(
+      x = landscape_type,
+      y = estimate__,
+      ymin = lower__,
+      ymax = upper__,
+      colour = school_context,
+      # Map the group aesthetic to the local rank
+      group = dodge_rank 
+    ),
+    size = 0.25,
+    position = position_dodge(width = 0.8)
+  ) +
+  scale_colour_manual(values = school_colours) +
+  facet_wrap(~ response) +
+  labs(
+    x = "Landscape type",
+    colour = "Schoolyard",
+    y = "Number of sensitizations (+/- 95% CI)"
+  ) +
+  scale_y_continuous(limits = c(0, 3))
+
+p_nisaac_ltsc_schooleffects
+
+saveRDS(
+  p_nisaac_ltsc_schooleffects,
+  file.path(data_objects_folder, "p_nisaac_ltsc_schooleffects.rds")
+)
+```
+
+
 We can calculate post-hoc comparison, stratified by landscape type to see if school types differ significantly within landscape types:
 
 ```{r emmeans-sclt-nsens}
