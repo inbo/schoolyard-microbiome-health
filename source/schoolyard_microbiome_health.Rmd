@@ -2797,6 +2797,933 @@ saveRDS(
 )
 ```
 
+## Number of allergic sensitizations (ISAAC survey data)
+
+```{r adj-mi-nisaac}
+priors <- set_prior(
+  prior = "normal(0,1)",
+  class = "b", 
+  resp = c(
+    "nsensitive",
+    "loginversesimpsonskin",
+    "sesmean",
+    "allergenicpotential"
+  )
+)
+
+bf_adj_mi_nisaac <-
+  bf(
+    update(rhs_isaac, n_sensitive | trials(3) ~ . + mi(allergenic_potential)),
+    decomp = "QR",
+    family = binomial()
+  ) +
+  bf(
+    ses_mean | mi() + trunc(lb = 0, ub = 1) 
+    ~ school_context*landscape_type,
+    family = gaussian()
+  ) +
+  bf(
+    log_inverse_simpson_skin | mi() ~ school_context*landscape_type
+    + (1|school_id),
+    family = gaussian()
+  ) +
+  bf(
+    allergenic_potential | mi() + trunc(lb = 0, ub = 4) ~
+      school_context*landscape_type,
+    family = gaussian()
+  ) +
+  set_rescor(FALSE)
+
+
+
+
+mv_adj_mi_nisaac <- brm(
+    formula = bf_adj_mi_nisaac,
+    data = health_data,
+    prior = priors,
+    cores = 4,
+    silent = 2,
+    refresh = 0,
+    chains = 4,
+    backend = "cmdstanr",
+    normalize = FALSE,
+    file_refit = "on_change",
+    file = file.path(
+      model_folder,
+      "mv_adj_mi_nisaac")
+)
+
+```
+
+```{r summary-nisaac}
+pvals <- pd(mv_adj_mi_nisaac) %>%
+  as_tibble() %>%
+  separate_wider_delim(
+    Parameter,
+    delim = "_",
+    too_many = "merge",
+    names = c("dropme", "response", "parameter")) %>%
+  select(-dropme) %>%
+  mutate(p_value = pd_to_p(pd)) %>%
+  select(-Effects, -Component)
+
+gather_draws(mv_adj_mi_nisaac, `b_nsen.*|bsp_nsen.*`,
+             regex = TRUE) %>%
+  separate_wider_delim(
+    .variable,
+    delim = "_",
+    too_many = "merge",
+    names = c("dropme", "response", "parameter")) %>%
+  select(-dropme) %>%
+  group_by(response, parameter) %>%
+  summarise_draws() %>%
+  inner_join(pvals) %>%
+  relocate(p_value, .before = rhat) %>%
+  select(-variable, -rhat, -ess_bulk, -ess_tail) %>%
+  kable(digits = 2)
+```
+
+\@ref(fig:mcmc-intervals-nisaac)
+
+(ref:mcmc-intervals-nisaac) Parameter estimates for the effects on the number of sensitizations. Point estimates represent the median of the posterior distribution. Thick and thin lines show 50% and 90% inner probability mass of the posterior distribution. Effects are with reference to urban landscape type, boys and non-green schoolyards.
+
+```{r mcmc-intervals-nisaac, fig.height = 200/25.4, out.width="100%", fig.cap="(ref:mcmc-intervals-nisaac)"}
+nisaac_alldata <- mcmc_intervals_data(
+  mv_adj_mi_nisaac,
+  regex_pars = "^(b|bsp)_nsensitive",
+  prob = 0.5, # inner interval probability mass
+  prob_outer = 0.9, # outer interval probability mass
+  point_est = "median"
+) |> 
+  mutate(
+    dataset = "all data"
+  )
+nisaac_alldata <- nisaac_alldata %>%
+  mutate(
+    response = "nsensitive",
+    parameter = gsub("^(b_nsensitive_|bsp_nsensitive_)", "", parameter),
+    parameter = gsub("landscape_typerural", "Rural", parameter),
+    parameter = gsub("school_contextgreen", "Green schoolyard", parameter),
+    parameter = gsub("biological_sexFemale", "Biological sex - girl", parameter),
+    parameter = gsub("mises_mean", "Mean school SES", parameter),
+    parameter = gsub("milog_inverse_simpson_skin", "Diversity skin microbiome", parameter),
+    parameter = gsub("f_allergies_familyyes", "Allergies in family - yes", parameter),
+    parameter = gsub("f_allergies_familyunknown", "Allergies in family - unknown", parameter),
+    parameter = gsub("miallergenic_potential", "Allergenic potential", parameter),
+    parameter = reorder(parameter, m)
+  )
+
+mcmc_intervals_nisaac <- nisaac_alldata |>
+  filter(parameter != "Intercept") |>
+  ggplot() +
+  geom_vline(xintercept = 0, alpha = 0.5) +
+  geom_linerange(
+    aes(
+      x = m,
+      xmin = ll,
+      xmax = hh,
+      y = parameter
+    ),
+    linewidth = 1, alpha = 0.5, position = position_dodge(width = 0.5)
+  ) +
+  geom_linerange(
+    aes(
+      x = m,
+      xmin = l,
+      xmax = h,
+      y = parameter
+    ),
+    linewidth = 2, alpha = 0.5, position = position_dodge(width = 0.5)
+  ) +
+  geom_point(
+    aes(
+      x = m,
+      y = parameter
+    ),
+    size = 3, alpha = 0.5, position = position_dodge(width = 0.5)
+  ) +
+  labs(
+    x = "Parameter estimates"
+  ) +
+  theme(
+    legend.position = "top",
+    axis.title.y = element_blank()
+  )
+
+mcmc_intervals_nisaac
+
+saveRDS(
+  mcmc_intervals_nisaac,
+  file.path(data_objects_folder, "mcmc_intervals_nisaac.rds")
+)
+```
+
+Posterior predictive checks:
+
+```{r ppcheck-nisaac}
+responses <- mv_adj_mi_nisaac$formula$responses
+checks <- vector("list", length(responses))
+for (i in seq_along(responses)) {
+  checks[[i]] <- pp_check(
+    mv_adj_mi_nisaac,
+    resp = responses[i],
+    ndraws = 50) + labs(x = responses[i])
+}
+checks %>%
+  wrap_plots()
+```
+
+```{r}
+preds <- conditional_effects(
+  mv_adj_mi_nisaac,
+  effects = "landscape_type:school_context",
+  resp = c("nsensitive")
+  )
+
+preds_df <- map2_dfr(
+  preds,
+  names(preds),
+  function(x, y) {
+    response <- stringr::str_extract(y, "^\\w*")
+    x$response <- response
+    x
+  }
+)
+
+preds_df <- preds_df |>
+  as_tibble()
+```
+
+```{r adj-mi-nisaac-preds-sclt}
+p_nisaac_ltsc <- preds_df |>
+  ggplot() +
+  geom_pointrange(
+    aes(
+      x = landscape_type,
+      y = estimate__,
+      ymin = lower__,
+      ymax = upper__,
+      colour = school_context
+    ),
+    position = position_dodge(width = 0.5)
+  ) +
+  scale_colour_manual(values = school_colours) +
+  labs(
+    x = "Landscape type",
+    colour = "Schoolyard",
+    y = "Number of sensitizations (+/- 95% CI)"
+  ) +
+  scale_y_continuous(limits = c(0, 3))
+
+p_nisaac_ltsc
+
+saveRDS(
+  p_nisaac_ltsc,
+  file.path(data_objects_folder, "p_nisaac_ltsc.rds")
+)
+
+```
+
+We can calculate post-hoc comparison, stratified by landscape type to see if school types differ significantly within landscape types:
+
+```{r emmeans-sclt-nsens}
+#Error : brms' emmeans support for multivariate models is limited to cases where all univariate models have the same family.
+# instead calc manually
+nd <- expand.grid(
+  school_context = c("non-green", "green"),
+  ses_mean = median(mv_adj_mi_nisaac$data$ses_mean, na.rm = TRUE),
+  landscape_type = c("urban", "rural")
+) %>%
+  mutate(
+    biological_sex = "Male",
+    ses_centered = 0,
+    f_allergies_family = "no",
+    garden_score = mean(health_data$garden_score, na.rm = TRUE) |> round(2),
+    natural_elements_score = mean(health_data$natural_elements_score) |>
+      round(2),
+    nature_connectedness =
+      mean(health_data$nature_connectedness, na.rm = TRUE)|> round(2),
+    mean_log_sirm = mean(health_data$mean_log_sirm, na.rm = TRUE)|> round(2),
+    log_invsimpson_plant = mean(health_data$log_invsimpson_plant, na.rm = TRUE),
+    log_invsimpson_dust = mean(health_data$log_invsimpson_dust, na.rm = TRUE),
+    log_invsimpson_soil = mean(health_data$log_invsimpson_soil, na.rm = TRUE),
+    log_inverse_simpson_skin = mean(health_data$log_inverse_simpson_skin, na.rm = TRUE),
+    sum_contact_animals = mean(health_data$sum_contact_animals, na.rm = TRUE) |>
+      round(2),
+    allergenic_potential = mean(
+      health_data$allergenic_potential, na.rm = TRUE
+    ) |>
+      round(2)
+  ) %>%
+  inner_join(ses_ranges_landscape) %>%
+  filter(
+    ses_mean >= min_overlap_ses_mean,
+    ses_mean <= max_overlap_ses_mean
+  )
+
+# linear predictor link scale (logit)
+pe <- tidybayes::add_linpred_rvars(
+  object = mv_adj_mi_nisaac,
+  re_formula = NA,
+  newdata = nd,
+  prob = 0.95,
+  robust = TRUE,
+  transform = FALSE,
+  resp = c("nsensitive")
+)
+
+# calculate risk ratio
+pe <- pe %>%
+  summarise(
+    across(
+      starts_with(".linpred"),
+      \(x) exp(last(x) - first(x)),
+      .names = "riskratio"
+    ),
+    contrast = paste(last(school_context), "/", first(school_context)),
+    .by = c(ses_mean, landscape_type, biological_sex, ses_centered,
+            garden_score, natural_elements_score, nature_connectedness,
+            mean_log_sirm, log_invsimpson_plant,
+            log_invsimpson_dust,
+            log_invsimpson_soil,
+            log_inverse_simpson_skin,
+            sum_contact_animals,
+            f_allergies_family,
+            allergenic_potential)
+  ) 
+pe |> 
+  select(landscape_type, contrast, riskratio) |>
+  mutate(
+    pd = pmax(sum(riskratio > 1), sum(riskratio < 1)) / sum(riskratio > -Inf),
+    p_value_two_sided = pd_to_p(pd),
+    p_value_one_sided = pd_to_p(pd, direction = "one-sided"),
+    riskratio = sprintf(
+      "%.2f [%.2f - %.2f]",
+      median(riskratio),
+      quantile2(riskratio, 0.025),
+      quantile2(riskratio, 0.975)
+    )
+  ) |> 
+  select(-pd) |> 
+  kable(digits = 2)
+
+```
+
+Figure \@ref(fig:sei-sc-interaction-nisaac) shows the interaction between school-level SES, on the one hand, and Schoolyard or landscape type, on the other hand.
+
+(ref:sei-sc-interaction-nisaac) Two-way interaction conditional effects between Schoolyard and landscape type, school-level socio-economic index and Schoolyard, school-level socio-economic index and landscape type, on number sensitized (backtransformed to original scale). The median of the posterior distribution and 95% credible intervals are shown.
+
+```{r sei-sc-interaction-nisaac, fig.height=120/25.4, out.width="110%", fig.cap="(ref:sei-sc-interaction-nisaac)"}
+preds <- conditional_effects(
+  mv_adj_mi_nisaac,
+  effects = "ses_mean:school_context",
+  resp = "nsensitive"
+  )
+
+preds_df_ses_sc <- map2_dfr(
+  preds,
+  names(preds),
+  function(x, y) {
+    response <- stringr::str_extract(y, "^\\w*")
+    x$response <- response
+    x
+  }
+)
+
+preds_df_ses_sc <- preds_df_ses_sc %>%
+  inner_join(ses_ranges) %>%
+  filter(
+    ses_mean >= min_ses_mean,
+    ses_mean <= max_ses_mean
+  )
+  
+preds_df_ses_sc <- preds_df_ses_sc |>
+  mutate(
+    response = factor(
+      response,
+      levels = kidscreen_groups$level,
+      labels = kidscreen_groups$label
+    )
+  ) |>
+  as_tibble()
+
+p_nisaac_ses_sc <- preds_df_ses_sc |>
+  ggplot() +
+  geom_ribbon(
+    aes(
+      x = ses_mean,
+      y = estimate__,
+      ymin = lower__,
+      ymax = upper__,
+      fill = school_context
+    ),
+    alpha = 0.3
+  ) +
+  geom_line(
+    aes(
+      x = ses_mean,
+      y = estimate__,
+      colour = school_context
+    )) +
+  scale_y_continuous(limits = c(0, 3)) +
+  scale_colour_manual(
+    values = school_colours) +
+  scale_fill_manual(
+    values = school_colours) +
+  labs(
+    x = "School-level Socio-Economic Index",
+    colour = "Schoolyard",
+    fill = "Schoolyard",
+    y = "Number of sensitizations (+/- 95% CI)"
+  )
+
+preds <- conditional_effects(
+  mv_adj_mi_nisaac,
+  effects = "ses_mean:landscape_type",
+  resp = "nsensitive"
+  )
+
+preds_df_ses_lt <- map2_dfr(
+  preds,
+  names(preds),
+  function(x, y) {
+    response <- stringr::str_extract(y, "^\\w*")
+    x$response <- response
+    x
+  }
+)
+
+preds_df_ses_lt <- preds_df_ses_lt %>%
+  inner_join(ses_ranges) %>%
+  filter(
+    ses_mean >= min_ses_mean,
+    ses_mean <= max_ses_mean
+  )
+  
+preds_df_ses_lt <- preds_df_ses_lt |>
+  mutate(
+    response = factor(
+      response,
+      levels = kidscreen_groups$level,
+      labels = kidscreen_groups$label
+    )
+  ) |>
+  as_tibble()
+
+p_nisaac_ses_lt <- preds_df_ses_lt |>
+  ggplot() +
+  geom_ribbon(
+    aes(
+      x = ses_mean,
+      y = estimate__,
+      ymin = lower__,
+      ymax = upper__,
+      fill = landscape_type
+    ),
+    alpha = 0.3
+  ) +
+  geom_line(
+    aes(
+      x = ses_mean,
+      y = estimate__,
+      colour = landscape_type
+    )) +
+  scale_y_continuous(limits = c(0, 3)) +
+  scale_colour_manual(
+    values = landscape_colours) +
+  scale_fill_manual(
+    values = landscape_colours) +
+  labs(
+    x = "School-level Socio-Economic Index",
+    colour = "Landscape type",
+    fill = "Landscape type",
+    y = "Number of sensitizations (+/- 95% CI)"
+  )
+
+p_nisaac_ltsc + p_nisaac_ses_sc + p_nisaac_ses_lt +
+  plot_layout(guides = "collect", axes = "collect") +
+  plot_annotation(tag_levels = "a")
+
+saveRDS(
+  p_nisaac_ses_sc,
+  file.path(data_objects_folder, "p_nisaac_ses_sc.rds")
+)
+saveRDS(
+  p_nisaac_ses_lt,
+  file.path(data_objects_folder, "p_nisaac_ses_lt.rds")
+)
+
+```
+
+Alternative visualisation that better shows how the three two-way interactions combine:
+
+```{r}
+preds <- conditional_effects(
+  mv_adj_mi_nisaac,
+  effects = "ses_mean:school_context",
+  conditions = make_conditions(mv_adj_mi_nisaac, "landscape_type"),
+  resp = "nsensitive"
+  )
+
+preds_df_ses_sc_lt <- map2_dfr(
+  preds,
+  names(preds),
+  function(x, y) {
+    response <- stringr::str_extract(y, "^\\w*")
+    x$response <- response
+    x
+  }
+)
+
+preds_df_ses_sc_lt <- preds_df_ses_sc_lt %>%
+  inner_join(ses_ranges) %>%
+  filter(
+    ses_mean >= min_ses_mean,
+    ses_mean <= max_ses_mean
+  ) |>
+  as_tibble()
+
+p_nisaac_ses_sc_lt <- preds_df_ses_sc_lt |>
+  ggplot() +
+  geom_ribbon(
+    aes(
+      x = ses_mean,
+      y = estimate__,
+      ymin = lower__,
+      ymax = upper__,
+      fill = school_context
+    ),
+    alpha = 0.3
+  ) +
+  geom_line(
+    aes(
+      x = ses_mean,
+      y = estimate__,
+      colour = school_context
+    )) +
+  scale_y_continuous(limits = c(0, 3)) +
+  scale_colour_manual(
+    values = school_colours) +
+  scale_fill_manual(
+    values = school_colours) +
+  facet_wrap(~ landscape_type) +
+  labs(
+    x = "School-level Socio-Economic Index",
+    colour = "Schoolyard",
+    fill = "Schoolyard",
+    y = "Number of sensitizations (+/- 95% CI)"
+  )
+
+p_nisaac_ses_sc_lt
+
+saveRDS(
+  p_nisaac_ses_sc_lt,
+  file.path(data_objects_folder, "p_nisaac_ses_sc_lt.rds")
+)
+```
+
+The corresponding slopes are:
+
+```{r nisaac-slopes-2way}
+# Obtain slopes for each landscape, school 
+drw <- as_draws_rvars(mv_adj_mi_nisaac)
+slope_drw <- list(
+  green_rural = drw$bsp_nsensitive_mises_mean 
+  + drw$`bsp_nsensitive_mises_mean:landscape_typerural`
+  + drw$`bsp_nsensitive_mises_mean:school_contextgreen`,
+  green_urban = drw$bsp_nsensitive_mises_mean 
+  + drw$`bsp_nsensitive_mises_mean:school_contextgreen`,
+  nongreen_rural = drw$bsp_nsensitive_mises_mean 
+  + drw$`bsp_nsensitive_mises_mean:landscape_typerural`,
+  nongreen_urban = drw$bsp_nsensitive_mises_mean
+)
+
+parameter <- names(slope_drw)
+rvars <- map_vec(slope_drw, \(x) x[[1]])
+mcmc_df <- tibble(
+  parameter = parameter,
+  slope = rvars
+) |> 
+  rowwise() |> 
+  mutate(
+    median = median(slope),
+    lower2.5 = quantile(slope, probs = 0.025),
+    upper97.5 = quantile(slope, probs = 0.975),
+    pd = pmax(
+      sum(slope > 0),
+      sum(slope < 0)
+      ) / sum(slope > -Inf),
+    p_value = pd_to_p(pd)
+  )
+
+mcmc_df |> 
+  mutate(
+    slope = sprintf(
+      "%.2f [%.2f - %.2f]",
+      median,
+      lower2.5,
+      upper97.5
+    )) |> 
+  select(parameter, slope, p_value) |> 
+kable(digits = 2)
+```
+
+```{r nisaac-diversity-lt-new}
+diversity_ranges <- health_data |>
+  group_by(landscape_type) |>
+  reframe(
+    across(contains("simpson"), \(x) range(x, na.rm = TRUE))
+  )
+
+preds <- conditional_effects(
+  mv_adj_mi_nisaac,
+  effects = "log_inverse_simpson_skin:school_context",
+  conditions = make_conditions(mv_adj_mi_nisaac, "landscape_type"),
+  resp = c("nsensitive")
+  )
+
+preds_df_skindiv_sc_lt <- map2_dfr(
+  preds,
+  names(preds),
+  function(x, y) {
+    response <- stringr::str_extract(y, "^\\w*")
+    x$response <- response
+    x
+  }
+)
+
+preds_df_skindiv_sc_lt <- preds_df_skindiv_sc_lt %>%
+  as_tibble()
+
+p_nisaac_skindiv_sc_lt <- preds_df_skindiv_sc_lt |>
+  ggplot() +
+  geom_ribbon(
+    aes(
+      x = exp(log_inverse_simpson_skin),
+      y = estimate__,
+      ymin = lower__,
+      ymax = upper__,
+      fill = school_context
+    ),
+    alpha = 0.3
+  ) +
+  geom_line(
+    aes(
+      x = exp(log_inverse_simpson_skin),
+      y = estimate__,
+      colour = school_context
+    )) +
+  scale_y_continuous(limits = c(0, 3)) +
+  scale_colour_manual(
+    values = school_colours) +
+  scale_fill_manual(
+    values = school_colours) +
+  facet_grid(~ landscape_type) +
+  labs(
+    x = "Skin microbial diversity",
+    colour = "Schoolyard",
+    fill = "Schoolyard",
+    y = "Predicted number of sensitizations (+/- 95% CI)"
+  ) +
+  scale_x_log10()
+
+p_nisaac_skindiv_sc_lt
+
+saveRDS(
+  p_nisaac_skindiv_sc_lt,
+  file.path(data_objects_folder, "p_nisaac_skindiv_sc_lt.rds")
+)
+```
+
+```{r calc-nisaac-diversity-slopes-new}
+# Obtain slopes for each landscape, school 
+drw <- as_draws_rvars(mv_adj_mi_nisaac)
+slope_drw <- expand_grid(
+  response = c("nsensitive"),
+  landscape_type = c("urban", "rural"),
+  school_context = c("non-green", "green"),
+  effect = c("skin")
+) |> 
+  mutate(
+    slope = case_when(
+      landscape_type == "rural"  & school_context == "non-green"
+      & effect == "skin" ~
+        drw$bsp_nsensitive_milog_inverse_simpson_skin 
+      + drw$`bsp_nsensitive_milog_inverse_simpson_skin:landscape_typerural`,
+      landscape_type == "urban"  & school_context == "non-green" &
+        effect == "skin"  ~
+        drw$bsp_nsensitive_milog_inverse_simpson_skin,
+      landscape_type == "rural"  & school_context == "green" &
+        effect == "skin" ~
+        drw$bsp_nsensitive_milog_inverse_simpson_skin 
+      + drw$`bsp_nsensitive_milog_inverse_simpson_skin:landscape_typerural`
+      + drw$`bsp_nsensitive_milog_inverse_simpson_skin:school_contextgreen`,
+      landscape_type == "urban"  & school_context == "green" 
+      & effect == "skin"  ~
+        drw$bsp_nsensitive_milog_inverse_simpson_skin
+      + drw$`bsp_nsensitive_milog_inverse_simpson_skin:school_contextgreen`
+    )      
+  )
+
+slopes_drw <- slope_drw |> 
+  rowwise() |> 
+  mutate(
+    median = median(slope),
+    lower2.5 = quantile(slope, probs = 0.025),
+    upper97.5 = quantile(slope, probs = 0.975),
+    pd = pmax(
+      sum(slope > 0),
+      sum(slope < 0)
+      ) / sum(slope > -Inf),
+    p_value = pd_to_p(pd)
+  )
+
+```
+
+(ref:nisaac-diversity-slopes-skin) Slopes (median and 95% credible intervals) for the effect of microbial skin diversity on ISAAC outcomes. Slope values are in log-odds scale and diversity values are log-transformed. Therefore, interpretation a k-fold increase of diversity is associated with a k\^slope multiplication of the odds. For instance, a 10 fold increase in skin microbial diversity in an urban, green schoolyard setting has the effect of reducing the odds of the number of sensitizations by a factor $10^{-0.40} \approx \times 2/5$.
+
+```{r nisaac-diversity-slopes-skin}
+slopes_drw |> 
+  select(-slope) |> 
+  mutate(
+    slope = sprintf(
+      "%.2f [%.2f - %.2f]",
+      median,
+      lower2.5,
+      upper97.5
+    ),
+    ten_fold_effect = sprintf(
+      "%.2f [%.2f - %.2f]",
+      10 ^ median,
+      10 ^ lower2.5,
+      10 ^ upper97.5
+    )
+  ) |> 
+  select(
+    response, landscape_type,
+    schoolyard = school_context,
+    effect, slope, ten_fold_effect, p_value
+  ) |> 
+  arrange(response) |> 
+  kable(
+    digits = 2,
+    caption = "(ref:nisaac-diversity-slopes-skin)"
+  )
+
+```
+
+```{r nisaac-diversity-slope-differences-skin}
+slope_differences_drw <- slope_drw |>
+  group_by(response, landscape_type, effect) |>
+  summarise(
+    slope_difference = slope[school_context == "green"] - slope[school_context == "non-green"]
+  ) |> 
+  mutate(
+    difference = "green - non-green"
+  ) |> 
+  rowwise() |> 
+  mutate(
+    median = median(slope_difference),
+    lower2.5 = quantile(slope_difference, probs = 0.025),
+    upper97.5 = quantile(slope_difference, probs = 0.975),
+    pd = pmax(
+      sum(slope_difference > 0),
+      sum(slope_difference < 0)
+      ) / sum(slope_difference > -Inf),
+    p_value = pd_to_p(pd)
+  )
+
+slope_differences_drw |>
+  select(-slope_difference) |> 
+  mutate(
+    slope_difference = sprintf(
+      "%.2f [%.2f - %.2f]",
+      median,
+      lower2.5,
+      upper97.5
+    )
+  ) |> 
+  select(response, effect, difference, slope_difference, p_value) |> 
+  kable(digits = 2)
+```
+
+```{r conditional-effects-adjusters-nisaac}
+preds <- conditional_effects(
+  mv_adj_mi_nisaac,
+  effects = adjusters,
+  resp = c("nsensitive")
+)
+
+preds_df <- map2_dfr(
+  preds,
+  names(preds),
+  function(x, y) {
+    response <- stringr::str_extract(y, "^\\w*")
+    adjuster <- names(x)[1]
+    x$response <- response
+    x$effect1__ <- adjuster
+    x
+  }
+)
+```
+
+```{r}
+p_nisaac_allergenic_potential <- preds_df %>%
+  select(-biological_sex, -f_allergies_family, -landscape_type, -school_context) %>%
+  pivot_longer(
+    cols = any_of(adjusters),
+    names_to = "variable",
+    values_to = "value"
+  ) %>%
+  filter(
+    variable == effect1__,
+    effect1__ %in% adj_2
+  ) %>%
+  ggplot() +
+  geom_ribbon(
+    aes(x = value,
+        y = estimate__,
+        ymin = lower__,
+        ymax = upper__),
+    alpha = 0.4
+    ) +
+  geom_line(
+    aes(
+      x = value,
+      y = estimate__
+    )
+  ) +
+  scale_y_continuous(limits = c(0, 3)) +
+  labs(y = "Predicted number of sensitizations (+/- 95% CI)",
+       x = "Allergenic potential of schoolyard")
+
+p_nisaac_allergenic_potential
+saveRDS(
+  p_nisaac_allergenic_potential,
+  file.path(data_objects_folder, "p_nisaac_allergenic_potential.rds")
+)
+```
+
+```{r nisaac-biological-sex, fig.width = 120/25.4}
+p_nisaac_biological_sex <- preds_df %>%
+  filter(effect1__ == "biological_sex") %>%
+  ggplot() +
+  geom_pointrange(
+    aes(
+      x = biological_sex,
+      y = estimate__,
+      ymin = lower__,
+      ymax = upper__
+    ),
+    position = position_dodge(width = 0.2)
+  ) +
+  scale_y_continuous(limits = c(0, 3)) +
+  labs(y = "Predicted number of sensitizations (+/- 95% CI)",
+       x = "") +
+  theme(axis.title.x = element_blank())
+
+p_nisaac_biological_sex
+
+saveRDS(
+  p_nisaac_biological_sex,
+  file.path(data_objects_folder, "p_nisaac_biological_sex.rds")
+)
+```
+
+```{r nisaac-biological-sex-risk-ratio}
+nd <- expand.grid(
+  biological_sex = c("Male", "Female")) %>%
+  mutate(
+    school_context = "non-green",
+    landscape_type = "urban",
+    f_allergies_family = "no",
+    ses_centered = 0,
+    ses_mean = mean(health_data$ses_mean, na.rm = TRUE) |> round(2),
+    garden_score = mean(health_data$garden_score, na.rm = TRUE) |> round(2),
+    natural_elements_score = mean(health_data$natural_elements_score) |>
+      round(2),
+    nature_connectedness =
+      mean(health_data$nature_connectedness, na.rm = TRUE)|> round(2),
+    mean_log_sirm = mean(health_data$mean_log_sirm, na.rm = TRUE)|> round(2),
+    log_invsimpson_plant = mean(health_data$log_invsimpson_plant, na.rm = TRUE),
+    log_invsimpson_dust = mean(health_data$log_invsimpson_dust, na.rm = TRUE),
+    log_invsimpson_soil = mean(health_data$log_invsimpson_soil, na.rm = TRUE),
+    log_inverse_simpson_skin = mean(health_data$log_inverse_simpson_skin, na.rm = TRUE),
+    sum_contact_animals = mean(health_data$sum_contact_animals, na.rm = TRUE) |>
+      round(2),
+    allergenic_potential = mean(
+      health_data$allergenic_potential, na.rm = TRUE
+    ) |>
+      round(2)
+  )
+
+# linear predictor link scale (logit)
+pe <- tidybayes::add_linpred_rvars(
+  object = mv_adj_mi_nisaac,
+  re_formula = NA,
+  newdata = nd,
+  prob = 0.95,
+  robust = TRUE,
+  transform = FALSE,
+  resp = c("nsensitive")
+)
+
+# calculate risk ratio
+pe <- pe |>
+  select(
+    biological_sex, .linpred
+  ) |> 
+  summarise(
+    across(
+      starts_with(".linpred"),
+      \(x) exp(last(x) - first(x)),
+      .names = "riskratio"
+    ),
+    contrast = paste(last(biological_sex), " / ", first(biological_sex))
+  )
+
+pe %>%
+  mutate(
+    pd = pmax(sum(riskratio > 1), sum(riskratio < 1)) / sum(riskratio > -Inf),
+    p_value_one_sided = pd_to_p(pd, direction = "one-sided"),
+    p_value_two_sided = pd_to_p(pd, direction = "two-sided"),
+    riskratio = sprintf(
+      "%.2f [%.2f - %.2f]",
+      median(riskratio),
+      quantile2(riskratio, 0.025),
+      quantile2(riskratio, 0.975)
+    )
+  ) |> 
+  select(-pd) |> 
+  kable(digits = 2)
+```
+
+
+```{r nisaac-f-allergies-family-new}
+p_nisaac_allergies_family <- preds_df %>%
+  filter(effect1__ == "f_allergies_family") %>%
+  ggplot() +
+  geom_pointrange(
+    aes(
+      x = f_allergies_family,
+      y = estimate__,
+      ymin = lower__,
+      ymax = upper__
+    ),
+    position = position_dodge(width = 0.2)
+  ) +
+  scale_y_continuous(limits = c(0, 3)) +
+  labs(y = "Predicted number of sensitizations (+/- 95% CI)")
+
+p_nisaac_allergies_family
+
+saveRDS(
+  p_nisaac_allergies_family,
+  file.path(data_objects_folder, "p_nisaac_allergies_family.rds")
+)
+```
+
+
 ## Skin microbial diversity model
 
 ```{r skindiv-model}
