@@ -2797,7 +2797,7 @@ saveRDS(
 )
 ```
 
-## Number of allergic sensitizations (ISAAC survey data)
+## Allergy category count (ISAAC survey data)
 
 ```{r adj-mi-nisaac, warning = FALSE}
 priors <- set_prior(
@@ -2885,7 +2885,7 @@ gather_draws(mv_adj_mi_nisaac, `b_nsen.*|bsp_nsen.*`,
 
 \@ref(fig:mcmc-intervals-nisaac)
 
-(ref:mcmc-intervals-nisaac) Parameter estimates for the effects on the number of sensitizations. Point estimates represent the median of the posterior distribution. Thick and thin lines show 50% and 90% inner probability mass of the posterior distribution. Effects are with reference to urban landscape type, boys and non-green schoolyards.
+(ref:mcmc-intervals-nisaac) Parameter estimates for the effects on the Allergy category count. Point estimates represent the median of the posterior distribution. Thick and thin lines show 50% and 90% inner probability mass of the posterior distribution. Effects are with reference to urban landscape type, boys and non-green schoolyards.
 
 ```{r mcmc-intervals-nisaac, fig.height = 200/25.4, out.width="100%", fig.cap="(ref:mcmc-intervals-nisaac)"}
 nisaac_alldata <- mcmc_intervals_data(
@@ -3011,7 +3011,7 @@ p_nisaac_ltsc <- preds_df |>
   labs(
     x = "Landscape type",
     colour = "Schoolyard",
-    y = "Number of sensitizations (+/- 95% CI)"
+    y = "Allergy category count (+/- 95% CI)"
   ) +
   scale_y_continuous(limits = c(0, 3))
 
@@ -3092,11 +3092,10 @@ p_nisaac_ltsc_schooleffects <- preds_df |>
     position = position_dodge(width = 0.8)
   ) +
   scale_colour_manual(values = school_colours) +
-  facet_wrap(~ response) +
   labs(
     x = "Landscape type",
     colour = "Schoolyard",
-    y = "Number of sensitizations (+/- 95% CI)"
+    y = "Allergy category counts (+/- 95% CI)"
   ) +
   scale_y_continuous(limits = c(0, 3))
 
@@ -3259,7 +3258,7 @@ p_nisaac_ses_sc <- preds_df_ses_sc |>
     x = "School-level Socio-Economic Index",
     colour = "Schoolyard",
     fill = "Schoolyard",
-    y = "Number of sensitizations (+/- 95% CI)"
+    y = "Allergy category count (+/- 95% CI)"
   )
 
 preds <- conditional_effects(
@@ -3322,7 +3321,7 @@ p_nisaac_ses_lt <- preds_df_ses_lt |>
     x = "School-level Socio-Economic Index",
     colour = "Landscape type",
     fill = "Landscape type",
-    y = "Number of sensitizations (+/- 95% CI)"
+    y = "Allergy category count (+/- 95% CI)"
   )
 
 p_nisaac_ltsc + p_nisaac_ses_sc + p_nisaac_ses_lt +
@@ -3396,7 +3395,7 @@ p_nisaac_ses_sc_lt <- preds_df_ses_sc_lt |>
     x = "School-level Socio-Economic Index",
     colour = "Schoolyard",
     fill = "Schoolyard",
-    y = "Number of sensitizations (+/- 95% CI)"
+    y = "Allergy category count (+/- 95% CI)"
   )
 
 p_nisaac_ses_sc_lt
@@ -3508,7 +3507,7 @@ p_nisaac_skindiv_sc_lt <- preds_df_skindiv_sc_lt |>
     x = "Skin microbial diversity",
     colour = "Schoolyard",
     fill = "Schoolyard",
-    y = "Predicted number of sensitizations (+/- 95% CI)"
+    y = "Predicted Allergy category count (+/- 95% CI)"
   ) +
   scale_x_log10()
 
@@ -3565,7 +3564,7 @@ slopes_drw <- slope_drw |>
 
 ```
 
-(ref:nisaac-diversity-slopes-skin) Slopes (median and 95% credible intervals) for the effect of microbial skin diversity on ISAAC outcomes. Slope values are in log-odds scale and diversity values are log-transformed. Therefore, interpretation a k-fold increase of diversity is associated with a k\^slope multiplication of the odds. For instance, a 10 fold increase in skin microbial diversity in an urban, green schoolyard setting has the effect of reducing the odds of the number of sensitizations by a factor $10^{-0.40} \approx \times 2/5$.
+(ref:nisaac-diversity-slopes-skin) Slopes (median and 95% credible intervals) for the effect of microbial skin diversity on ISAAC outcomes. Slope values are in log-odds scale and diversity values are log-transformed. Therefore, interpretation a k-fold increase of diversity is associated with a k\^slope multiplication of the odds. For instance, a 10 fold increase in skin microbial diversity in an urban, green schoolyard setting has the effect of reducing the odds of the Allergy category count by a factor $10^{-0.40} \approx \times 2/5$.
 
 ```{r nisaac-diversity-slopes-skin}
 slopes_drw |> 
@@ -3679,7 +3678,7 @@ p_nisaac_allergenic_potential <- preds_df %>%
     )
   ) +
   scale_y_continuous(limits = c(0, 3)) +
-  labs(y = "Predicted number of sensitizations (+/- 95% CI)",
+  labs(y = "Predicted Allergy category count (+/- 95% CI)",
        x = "Allergenic potential of schoolyard")
 
 p_nisaac_allergenic_potential
@@ -3703,7 +3702,7 @@ p_nisaac_biological_sex <- preds_df %>%
     position = position_dodge(width = 0.2)
   ) +
   scale_y_continuous(limits = c(0, 3)) +
-  labs(y = "Predicted number of sensitizations (+/- 95% CI)",
+  labs(y = "Predicted Allergy category count (+/- 95% CI)",
        x = "") +
   theme(axis.title.x = element_blank())
 
@@ -3798,7 +3797,7 @@ p_nisaac_allergies_family <- preds_df %>%
     position = position_dodge(width = 0.2)
   ) +
   scale_y_continuous(limits = c(0, 3)) +
-  labs(y = "Predicted number of sensitizations (+/- 95% CI)")
+  labs(y = "Predicted Allergy category count (+/- 95% CI)")
 
 p_nisaac_allergies_family
 
