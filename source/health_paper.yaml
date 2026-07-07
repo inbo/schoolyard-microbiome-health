@@ -179,4 +179,69 @@ references:
   title: "R: a language and environment for statistical computing"
   type: report
   URL: "https://www.R-project.org/"
+- id: aerts2025
+  accessed: "07:54:19"
+  author:
+  - family: Aerts
+    given: Raf
+  - family: Van Calster
+    given: Hans
+  - family: Ozen
+    given: Melike
+  - family: Benchrih
+    given: Rafiqa
+  - family: Heyman
+    given: Sophie
+  - family: Swerts
+    given: Edith
+  - family: Wuyts
+    given: Arlien
+  - family: Lammens
+    given: Liesa
+  - family: Lommelen
+    given: Els
+  - family: Leone
+    given: Michael
+  - family: Wanner
+    given: Saskia
+  - family: Brulein
+    given: Harmony
+  - family: Groslambert
+    given: Antoine
+  - family: Vanmeersche
+    given: Linda
+  - family: Legein
+    given: Marie
+  - family: Smets
+    given: Wenke
+  - family: Spacova
+    given: Irina
+  - family: De Clercq
+    given: Eva M.
+  - family: Lebeer
+    given: Sarah
+  - family: Leonard
+    given: Anna
+  - family: Vanwambeke
+    given: Sophie O.
+  - family: Keune
+    given: Hans
+  citationKey: aerts2025
+  container-title: Urban Forestry & Urban Greening
+  container-title-short: Urban Forestry & Urban Greening
+  DOI: 10.1016/j.ufug.2025.128680
+  ISSN: 1618-8667
+  issued: 2025-03-01
+  key: AL99CCZX
+  libraryID: 1
+  page: 128680
+  providerKey: 2509FBBE-5BB0-44C4-B119-6083A81ED673
+  source: ScienceDirect
+  title: "Green space at school and attention in primary school children
+    in Belgium: A stratified matched case-control study"
+  title-short: Green space at school and attention in primary school
+    children in Belgium
+  type: article-journal
+  URL: "https://www.sciencedirect.com/science/article/pii/S1618866725000147"
+  volume: 105
 ...

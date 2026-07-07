@@ -94,15 +94,14 @@ landscape_colours <- c(rural = "cadetblue", urban = "sienna")
 
 # Data preparation
 
-::: {.warning}
-**Warning:** This document contains the analysis pipeline that was used for the paper _Environmental bacteria link green schoolyards to better child well-being and fewer allergy symptoms_.
+::: warning
+**Warning:** This document contains the analysis pipeline that was used for the paper *Environmental bacteria link green schoolyards to better child well-being and fewer allergy symptoms*.
 While the code is identical, the data used in this document (513 participants) is a (large) subset of the data used in the paper (529 participants).
 The reason for this is that some participants / parents did not give consent for long-term storage / archiving of their data.
 As such, we had permission to use their data in publications, but not to publish their data in a long-term public archive.
 The data used in this repository, which are downloaded from <https://doi.org/10.5281/zenodo.10527033> (see `source/reproduce.R`), therefore only include data from participants / parents that gave consent for long-term storage of their data.
 As a consequence, the results from the paper are not exactly reproducible.
 :::
-
 
 ```{r cleaned-data}
 cleaned_data <- read_package(
@@ -314,9 +313,6 @@ health_data <- health_data |>
 
 ```
 
-
-
-
 ```{r read-microbiome-diversity}
 env_samples_diversity <- readr::read_csv(
   here("data", "env_samples_diversity.csv"),
@@ -357,8 +353,6 @@ health_data <- health_data |>
   )
 ```
 
-
-
 ```{r add-missing-natural-elements-score}
 # some schools have no natural elements score
 # these missing values were imputed by manual interpretation of photo's 
@@ -380,12 +374,11 @@ health_data <- health_data |>
     ))
 ```
 
-
 # Data analysis
 
 ## School and participant characteristics
 
-A total of 167 schools were contacted out of which 40 expressed interest to participate and 37 participated; these 37 schools had 929 children in the fifth grade out of which 527 children (57%) gave consent to participate in at least one of the tests (Fig. \@ref(fig:flowcharts)).
+A total of 167 schools were contacted out of which 40 expressed interest to participate and 37 participated; these 37 schools had 929 children in the fifth grade out of which 529 children (57%) gave consent to participate in at least one of the tests (Fig. \@ref(fig:flowcharts)) [@aerts2025].
 In addition, 16 children did not give consent for long-term archiving of data.
 
 (ref:flowcharts) Flowchart depicting the number of schools that were contacted, interested and participated (left-side, and the number of fifth grade children that gave consent and for which at least one test was available (right-side).
@@ -416,7 +409,6 @@ health_data <- health_data |>
       )
   )
 ```
-
 
 ## Descriptive statistics of the study population
 
@@ -470,11 +462,11 @@ We calculate Spearman rank correlations between outcomes and visualise them in F
 
 The KIDSCREEN scores are all positively correlated with each other.
 
--   phy: physical well-being
--   sch: well being at school
--   par: family life and free time
--   pwb: general mood and how you feel
--   soc: friends
+- phy: physical well-being
+- sch: well being at school
+- par: family life and free time
+- pwb: general mood and how you feel
+- soc: friends
 
 The ISAAC scores are also correlated but to a lesser extent.
 
@@ -523,7 +515,6 @@ health_data |>
   naniar::vis_miss(cluster = TRUE, sort_miss = TRUE) +
   expand_limits(x = 22)
 ```
-
 
 ### Collinearity
 
@@ -993,7 +984,6 @@ saveRDS(
 )
 ```
 
-
 We can calculate post-hoc comparison, stratified by landscape type to see if school types differ significantly within landscape types:
 
 ```{r emmeans-sclt-ks}
@@ -1458,9 +1448,7 @@ saveRDS(
 )
 ```
 
-
 ## Wheezing, rhinitis, eczema (ISAAC survey data)
-
 
 ```{r adj-mi-isaac-new, warning=FALSE}
 priors <- set_prior(
@@ -1681,8 +1669,7 @@ checks |>
 
 Figure \@ref(fig:adj-mi-isaac-preds-sclt-new)
 
-(ref:adj-mi-isaac-preds-sclt-new) Predicted percentage of children sensitized to rhinitis, wheezing or eczema as a function of landscape type and schoolyard. The centrality measure is the median and the line intervals correspond to 95% credible intervals. 
-
+(ref:adj-mi-isaac-preds-sclt-new) Predicted percentage of children sensitized to rhinitis, wheezing or eczema as a function of landscape type and schoolyard. The centrality measure is the median and the line intervals correspond to 95% credible intervals.
 
 ```{r adj-mi-isaac-preds-sclt-new, fig.cap = "(ref:adj-mi-isaac-preds-sclt-new)"}
 preds <- conditional_effects(
@@ -1742,7 +1729,7 @@ saveRDS(
 
 Figure \@ref(fig:adj-mi-isaac-preds-sclt-school-effects)
 
-(ref:adj-mi-isaac-preds-sclt-school-effects) Predicted percentage of children sensitized to rhinitis, wheezing or eczema as a function of landscape type and schoolyard. The centrality measure is the median and the line intervals correspond to 95% credible intervals. 
+(ref:adj-mi-isaac-preds-sclt-school-effects) Predicted percentage of children sensitized to rhinitis, wheezing or eczema as a function of landscape type and schoolyard. The centrality measure is the median and the line intervals correspond to 95% credible intervals.
 
 ```{r adj-mi-isaac-preds-sclt-school-effects, fig.cap = "(ref:adj-mi-isaac-preds-sclt-school-effects)"}
 preds <- conditional_effects(
@@ -1823,8 +1810,6 @@ saveRDS(
   file.path(data_objects_folder, "p_isaac_ltsc_schooleffects.rds")
 )
 ```
-
-
 
 We can calculate post-hoc comparison, stratified by landscape type to see if school types differ significantly within landscape types:
 
@@ -2684,7 +2669,6 @@ saveRDS(
 )
 ```
 
-
 ```{r isaac-biological-sex-riskratio}
 nd <- expand.grid(
   biological_sex = c("Male", "Female")) |>
@@ -2769,8 +2753,6 @@ pe |>
   kable(digits = 2)
 
 ```
-
-
 
 ```{r isaac-f-allergies-family-new}
 p_isaac_allergies_family <- preds_df |>
@@ -3026,7 +3008,7 @@ saveRDS(
 
 Figure \@ref(fig:adj-mi-nisaac-preds-sclt-school-effects)
 
-(ref:adj-mi-nisaac-preds-sclt-school-effects) Predicted number of allergenic sensitizations for each school as a function of landscape type and schoolyard. The centrality measure is the median and the line intervals correspond to 95% credible intervals. 
+(ref:adj-mi-nisaac-preds-sclt-school-effects) Predicted number of allergenic sensitizations for each school as a function of landscape type and schoolyard. The centrality measure is the median and the line intervals correspond to 95% credible intervals.
 
 ```{r adj-mi-nisaac-preds-sclt-school-effects, fig.cap = "(ref:adj-mi-nisaac-preds-sclt-school-effects)"}
 preds <- conditional_effects(
@@ -3106,7 +3088,6 @@ saveRDS(
   file.path(data_objects_folder, "p_nisaac_ltsc_schooleffects.rds")
 )
 ```
-
 
 We can calculate post-hoc comparison, stratified by landscape type to see if school types differ significantly within landscape types:
 
@@ -3782,7 +3763,6 @@ pe %>%
   kable(digits = 2)
 ```
 
-
 ```{r nisaac-f-allergies-family-new}
 p_nisaac_allergies_family <- preds_df %>%
   filter(effect1__ == "f_allergies_family") %>%
@@ -3806,7 +3786,6 @@ saveRDS(
   file.path(data_objects_folder, "p_nisaac_allergies_family.rds")
 )
 ```
-
 
 ## Skin microbial diversity model
 
@@ -4284,17 +4263,16 @@ saveRDS(
 )
 ```
 
-
 # Session info
 
 <details>
-<summary>Click to view Session Info</summary> 
+
+<summary>Click to view Session Info</summary>
 
 ```{r session-info, echo=FALSE}
 sessioninfo::session_info()
 ```
 
 </details>
-
 
 # References
