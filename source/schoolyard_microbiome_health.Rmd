@@ -1,6 +1,6 @@
 ---
 title: "Supplementary information for _Environmental bacteria link green schoolyards to better child well-being and fewer allergy symptoms_"
-author: "Hans Van Calster"
+author: "Hans Van Calster, Wenke Smets, Marie Legein, Wannes Van Beeck, Lize Delanghe, Antoine Groslambert, Harmony Brulein, Els Lommelen, Linda Van Meersche, Michael Leone, Edith Swerts, Arlien Wuyts, Karen Wuyts, Max Dekeukeleire, Liesa Lammens, Melike Özen, Rafiqa Benchrih, Mina Diri, Saskia Wanner, Sofie Heyman, Raïsa Carmen, Roeland Samson, Eva M. De Clercq, Anna Leonard, Sophie O. Vanwambeke, Raf Aerts, Hans Keune, Sarah Lebeer, Irina Spacova"
 date: "`r Sys.Date()`"
 output:
   bookdown::html_document2:
