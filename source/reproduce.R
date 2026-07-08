@@ -4,6 +4,9 @@
 # schoolyard-microbiome-health.Rproj file.
 # If you are using RStudio and started the project by opening this file with
 # RStudio, your working directory will be correct.
+# For instructions on how to clone a repository, see
+# https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository
+
 
 if (!"renv" %in% rownames(installed.packages())) {
   install.packages("renv")
