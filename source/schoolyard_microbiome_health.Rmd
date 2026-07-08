@@ -19,7 +19,7 @@ bibliography: health_paper.yaml
 library(knitr)
 library(here)
 opts_chunk$set(
-    echo = FALSE, message = FALSE, out.width = "100%",
+    echo = TRUE, message = FALSE, out.width = "100%",
   dev = "png", dpi = 300)
 opts_knit$set(root.dir = here())
 library(frictionless)
@@ -38,8 +38,6 @@ library(INBOtheme)
 library(bayesplot)
 library(posterior)
 library(kableExtra)
-
-theme_set(theme_inbo(transparent = TRUE))
 
 conflicted::conflicts_prefer(brms::ar)
 conflicted::conflicts_prefer(tidyr::expand)
@@ -421,7 +419,7 @@ The number of participating children in schools labelled as 'non-green' is about
 
 (ref:table1) Description of main characteristics of the study population. *N* is the number of children.
 
-```{r table1, tab.cap="(ref:table1)"}
+```{r table1}
 data_to_summarize <- health_data |>
   select(
     landscape_type, school_context,
@@ -441,6 +439,7 @@ t0 <- modelsummary::datasummary_balance(
     community ~ lt_sc,
   data = data_to_summarize,
   dinm = FALSE,
+  title = "(ref:table1)",
   output = "kableExtra"
   )
 
@@ -529,7 +528,7 @@ This is a modest correlation and it is likely not problematic to include both co
 
 (ref:collinearity1) Correlation plot showing Spearman rank correlation between covariates.
 
-```{r collinearity1, fig.cap = "(ref:collinearity1)"}
+```{r collinearity1, fig.cap = "(ref:collinearity1)", fig.height = 6, fig.width = 6}
 cordat2 <- health_data |>
   select(
     all_of(all.vars(covars))) |>
@@ -953,9 +952,14 @@ preds_df_ks_sc_lt_school_effects <- preds_df |>
 
 p_ks_sc_lt_school_effects <- preds_df_ks_sc_lt_school_effects |>
     # Group by the facet and x-axis variable
-  group_by(response, landscape_type) |> 
-  # Sort ascending by estimate__ (per your request)
-  arrange(estimate__) |> 
+  group_by(response, landscape_type) |>
+  mutate(
+    sign = mean(estimate__[school_context == "green"]) -
+      mean(estimate__[school_context == "non-green"]),
+    sortorder = sign * estimate__
+  ) |> 
+  # Sort by sign * estimate__
+  arrange(sortorder) |> 
   # Create a local rank for the dodging order
   mutate(dodge_rank = factor(row_number())) |> 
   ungroup() |> 
@@ -970,6 +974,7 @@ p_ks_sc_lt_school_effects <- preds_df_ks_sc_lt_school_effects |>
       group = dodge_rank
     ),
     size = 0.25,
+    alpha = 0.5,
     position = position_dodge(width = 0.8)
   ) +
   scale_colour_manual(values = school_colours) +
@@ -1796,6 +1801,7 @@ p_isaac_ltsc_schooleffects <- preds_df_isaac_ltsc_schooleffects |>
       group = dodge_rank 
     ),
     size = 0.25,
+    alpha = 0.5,
     position = position_dodge(width = 0.8)
   ) +
   scale_colour_manual(values = school_colours) +
@@ -3075,6 +3081,7 @@ p_nisaac_ltsc_schooleffects <- preds_df_nisaac_ltsc_schooleffects |>
       group = dodge_rank 
     ),
     size = 0.25,
+    alpha = 0.5,
     position = position_dodge(width = 0.8)
   ) +
   scale_colour_manual(values = school_colours) +
