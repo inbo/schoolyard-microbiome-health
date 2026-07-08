@@ -89,6 +89,10 @@ school_colours <- c(
   `green` = "#40B0A6",
   `non-green` = "#E1BE6A"
 )
+school_colours <- c(
+  `green`     = "#006450",
+  `non-green` = "#A34700"
+)
 landscape_colours <- c(rural = "cadetblue", urban = "sienna")
 ```
 
@@ -866,7 +870,7 @@ preds_df <- map2_dfr(
   }
 )
 
-preds_df <- preds_df |>
+preds_df_ks_sc_lt <- preds_df |>
   mutate(
     response = factor(
       response,
@@ -876,7 +880,7 @@ preds_df <- preds_df |>
   ) |>
   as_tibble()
 
-p_ks_sc_lt <- preds_df |>
+p_ks_sc_lt <- preds_df_ks_sc_lt |>
   ggplot() +
   geom_pointrange(
     aes(
@@ -937,7 +941,7 @@ school_cats <- health_data |>
 preds_df <- preds_df |>
   semi_join(school_cats, by = join_by(school_id, landscape_type, school_context))
 
-preds_df <- preds_df |>
+preds_df_ks_sc_lt_school_effects <- preds_df |>
   mutate(
     response = factor(
       response,
@@ -947,7 +951,7 @@ preds_df <- preds_df |>
   ) |>
   as_tibble()
 
-p_ks_sc_lt_school_effects <- preds_df |>
+p_ks_sc_lt_school_effects <- preds_df_ks_sc_lt_school_effects |>
     # Group by the facet and x-axis variable
   group_by(response, landscape_type) |> 
   # Sort ascending by estimate__ (per your request)
@@ -1688,7 +1692,7 @@ preds_df <- map2_dfr(
   }
 )
 
-preds_df <- preds_df |>
+preds_df_isaac_ltsc <- preds_df |>
   mutate(
     response = factor(
       response,
@@ -1698,7 +1702,7 @@ preds_df <- preds_df |>
   ) |>
   as_tibble()
 
-p_isaac_ltsc <- preds_df |>
+p_isaac_ltsc <- preds_df_isaac_ltsc |>
   ggplot() +
   geom_pointrange(
     aes(
@@ -1762,7 +1766,7 @@ preds_df <- preds_df |>
   )
 
 
-preds_df <- preds_df |>
+preds_df_isaac_ltsc_schooleffects <- preds_df |>
   mutate(
     response = factor(
       response,
@@ -1772,7 +1776,7 @@ preds_df <- preds_df |>
   ) |>
   as_tibble()
 
-p_isaac_ltsc_schooleffects <- preds_df |>
+p_isaac_ltsc_schooleffects <- preds_df_isaac_ltsc_schooleffects |>
   # Group by the facet and x-axis variable
   group_by(response, landscape_type) |> 
   # Sort ascending by estimate__ (per your request)
@@ -2972,12 +2976,12 @@ preds_df <- map2_dfr(
   }
 )
 
-preds_df <- preds_df |>
+preds_df_nisaac_ltsc <- preds_df |>
   as_tibble()
 ```
 
 ```{r adj-mi-nisaac-preds-sclt}
-p_nisaac_ltsc <- preds_df |>
+p_nisaac_ltsc <- preds_df_nisaac_ltsc |>
   ggplot() +
   geom_pointrange(
     aes(
@@ -3041,7 +3045,7 @@ preds_df <- preds_df |>
   )
 
 
-preds_df <- preds_df |>
+preds_df_nisaac_ltsc_schooleffects <- preds_df |>
   mutate(
     response = factor(
       response,
@@ -3051,7 +3055,7 @@ preds_df <- preds_df |>
   ) |>
   as_tibble()
 
-p_nisaac_ltsc_schooleffects <- preds_df |>
+p_nisaac_ltsc_schooleffects <- preds_df_nisaac_ltsc_schooleffects |>
   # Group by the facet and x-axis variable
   group_by(response, landscape_type) |> 
   # Sort ascending by estimate__ (per your request)
@@ -3786,6 +3790,175 @@ saveRDS(
   file.path(data_objects_folder, "p_nisaac_allergies_family.rds")
 )
 ```
+
+## Combined figures
+
+```{r fig-main-1, fig.height=140/25.4, fig.width = 180/25.4}
+p_ks_sc_lt_combined <- preds_df_ks_sc_lt_school_effects |>
+    # Group by the facet and x-axis variable
+  group_by(response, landscape_type) |>
+  mutate(
+    sign = mean(estimate__[school_context == "green"]) -
+      mean(estimate__[school_context == "non-green"]),
+    sortorder = sign * estimate__
+  ) |> 
+  # Sort by sign * estimate__
+  arrange(sortorder) |> 
+  # Create a local rank for the dodging order
+  mutate(dodge_rank = factor(row_number())) |> 
+  ungroup() |> 
+  ggplot() +
+  geom_pointrange(
+    aes(
+      x = landscape_type,
+      y = estimate__ * 10 + 50,
+      ymin = lower__ * 10 + 50,
+      ymax = upper__ * 10 + 50,
+      colour = school_context,
+      group = dodge_rank
+    ),
+    size = 0.25,
+    alpha = 0.2,
+    position = position_dodge(width = 0.8)
+  ) +
+  geom_pointrange(
+    data = preds_df_ks_sc_lt,
+    aes(
+      x = landscape_type,
+      y = estimate__ * 10 + 50,
+      ymin = lower__ * 10 + 50,
+      ymax = upper__ * 10 + 50,
+      colour = school_context
+    ),
+    position = position_dodge(width = 0.8)
+  ) +
+  scale_colour_manual(values = school_colours) +
+  scale_y_continuous(breaks = seq(30, 60, 5)) +
+  facet_grid(cols = vars(response), labeller = label_wrap_gen(width = 15)) +
+  labs(
+    x = "Landscape type",
+    colour = "Schoolyard",
+    y = "KIDSCREEN-27 score\n(+/- 95% CI)"
+  )
+
+p_isaac_ltsc_combined <- preds_df_isaac_ltsc_schooleffects |>
+  # Group by the facet and x-axis variable
+  group_by(response, landscape_type) |> 
+  mutate(
+    sign = mean(estimate__[school_context == "green"]) -
+      mean(estimate__[school_context == "non-green"]),
+    sortorder = sign * estimate__
+  ) |> 
+  # Sort by sign * estimate__
+  arrange(sortorder) |> 
+  # Create a local rank for the dodging order
+  mutate(dodge_rank = factor(row_number())) |> 
+  ungroup() |> 
+  ggplot() +
+  geom_pointrange(
+    aes(
+      x = landscape_type,
+      y = estimate__,
+      ymin = lower__,
+      ymax = upper__,
+      colour = school_context,
+      # Map the group aesthetic to the local rank
+      group = dodge_rank 
+    ),
+    size = 0.25,
+    alpha = 0.2,
+    position = position_dodge(width = 0.8)
+  ) +
+  geom_pointrange(
+    data = preds_df_isaac_ltsc,
+    aes(
+      x = landscape_type,
+      y = estimate__,
+      ymin = lower__,
+      ymax = upper__,
+      colour = school_context
+    ),
+    position = position_dodge(width = 0.8)
+  ) +
+  scale_colour_manual(values = school_colours) +
+  facet_wrap(~ response) +
+  labs(
+    x = "Landscape type",
+    colour = "Schoolyard",
+    y = "Percentage of sensitized children\n(+/- 95% CI)"
+  ) +
+  scale_y_continuous(labels = scales::percent, limits = c(0, NA))
+
+
+p_nisaac_ltsc_combined <- preds_df_nisaac_ltsc_schooleffects |>
+  # Group by the facet and x-axis variable
+  group_by(response, landscape_type) |> 
+  mutate(
+    sign = mean(estimate__[school_context == "green"]) -
+      mean(estimate__[school_context == "non-green"]),
+    sortorder = sign * estimate__
+  ) |> 
+  # Sort by sign * estimate__
+  arrange(sortorder) |> 
+  # Create a local rank for the dodging order
+  mutate(dodge_rank = factor(row_number())) |> 
+  ungroup() |> 
+  ggplot() +
+  geom_pointrange(
+    aes(
+      x = landscape_type,
+      y = estimate__,
+      ymin = lower__,
+      ymax = upper__,
+      colour = school_context,
+      # Map the group aesthetic to the local rank
+      group = dodge_rank 
+    ),
+    size = 0.25,
+    alpha = 0.2,
+    position = position_dodge(width = 0.8)
+  ) +
+  geom_pointrange(
+    data = preds_df_nisaac_ltsc,
+    aes(
+      x = landscape_type,
+      y = estimate__,
+      ymin = lower__,
+      ymax = upper__,
+      colour = school_context
+    ),
+    position = position_dodge(width = 0.8)
+  ) +
+  scale_colour_manual(values = school_colours) +
+  labs(
+    x = "Landscape type",
+    colour = "Schoolyard",
+    y = "Allergy categories counts\n(+/- 95% CI)"
+  ) +
+  scale_y_continuous(limits = c(0, 3))
+
+
+p_sc_lt_combined <- p_ks_sc_lt_combined / 
+  p_isaac_ltsc_combined / 
+  p_nisaac_ltsc_combined /
+  guide_area() +
+  plot_layout(
+    design = "
+    aaaaa
+    bbbcd
+    ",
+    guides = "collect", axes = "collect") +
+  plot_annotation(tag_levels = "A")
+
+p_sc_lt_combined
+
+saveRDS(
+  p_sc_lt_combined,
+  file.path(data_objects_folder, "p_sc_lt_combined.rds")
+)
+
+```
+
 
 ## Skin microbial diversity model
 
