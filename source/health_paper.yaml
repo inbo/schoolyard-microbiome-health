@@ -244,4 +244,61 @@ references:
   type: article-journal
   URL: "https://www.sciencedirect.com/science/article/pii/S1618866725000147"
   volume: 105
+- id: vancalster2024
+  accessed: "13:53:00"
+  author:
+  - family: Van Calster
+    given: Hans
+  - family: Lommelen
+    given: Els
+  - family: Groslambert
+    given: Antoine
+  - family: Leonard
+    given: Anna
+  - family: Vanmeersche
+    given: Linda
+  - family: Brulein
+    given: Harmony
+  - family: Vanwambeke
+    given: Sophie O.
+  - family: Aerts
+    given: Raf
+  - family: De Clercq
+    given: Eva M.
+  - family: Benchrih
+    given: Rafiqa
+  - family: Melike
+    given: Ozen
+  - family: Carmen
+    given: Raïsa
+  - family: Lammens
+    given: Liesa
+  - family: Leone
+    given: Michael
+  - family: Wanner
+    given: Saskia
+  - family: Lebeer
+    given: Sarah
+  - family: Legein
+    given: Marie
+  - family: Smets
+    given: Wenke
+  - family: Spacova
+    given: Irina
+  - family: Keune
+    given: Hans
+  citationKey: vancalster2024a
+  DOI: 10.5281/zenodo.10527033
+  issued: 2024-02-05
+  key: PXSM2LAT
+  language: eng
+  libraryID: 1
+  providerKey: 2509FBBE-5BB0-44C4-B119-6083A81ED673
+  publisher: Research Institute for Nature and Forest (INBO)
+  source: Zenodo
+  title: Data from a cross-sectional study of fifth grade children in a
+    sample of primary schools in Belgium that differ in amount of
+    greenness at school and landscape level
+  type: article-journal
+  URL: "https://zenodo.org/records/10527033"
 ...
