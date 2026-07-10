@@ -53,3 +53,8 @@ rmarkdown::render(
   input = here("source", "schoolyard_microbiome_health.Rmd"),
   output_dir = here("output")
 )
+
+rmarkdown::render(
+  input = here("source", "extra_microbiome_analysis.Rmd"),
+  output_dir = here("output")
+)
