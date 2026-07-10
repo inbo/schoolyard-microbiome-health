@@ -1,7 +1,7 @@
 <!-- badges: start -->
 [![website](https://img.shields.io/badge/website-https://www.uantwerpen.be/nl/projecten/baseball/-c04384)](https://www.uantwerpen.be/nl/projecten/baseball/)
 ![Language: en-GB](https://img.shields.io/badge/language-en--GB-c04384)
-[![CC BY 4.0](https://img.shields.io/badge/License-CC BY 4.0-brightgreen)](https://raw.githubusercontent.com/inbo/citeme/refs/heads/main/inst/licenses/cc_by_4_0.md)
+[![CC BY 4.0](https://img.shields.io/badge/License-CC_BY_4.0-brightgreen)](https://raw.githubusercontent.com/inbo/citeme/refs/heads/main/inst/licenses/cc_by_4_0.md)
 ![version: 0.2.0](https://img.shields.io/badge/version-0.2.0-c04384)
 [![Project Status: Active – The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
 [![Release](https://img.shields.io/github/release/inbo/schoolyard-microbiome-health.svg)](https://github.com/inbo/schoolyard-microbiome-health/releases)
