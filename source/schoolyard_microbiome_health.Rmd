@@ -458,7 +458,8 @@ health_outcomes <- health_data |>
   )
 
 health_outcomes |>
-  naniar::vis_miss()
+  naniar::vis_miss() +
+  theme(axis.text.x = element_text(vjust = 0))
 ```
 
 We calculate Spearman rank correlations between outcomes and visualise them in Figure \@ref(fig:corrplot).
@@ -516,7 +517,8 @@ health_data |>
     all_of(all.vars(covars))) %>%
   mutate(all_combined = ifelse(complete.cases(.), 1, NA)) |>
   naniar::vis_miss(cluster = TRUE, sort_miss = TRUE) +
-  expand_limits(x = 22)
+  expand_limits(x = 22) +
+  theme(axis.text.x = element_text(vjust = 0))
 ```
 
 ### Collinearity
