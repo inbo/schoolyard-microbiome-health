@@ -41,4 +41,4 @@ abstract: "Code and supplementary data for the paper: Smets et al. (2026). Envir
 identifiers:
 - type: url
   value: https://www.uantwerpen.be/nl/projecten/baseball/
-version: 0.2.0
+version: 0.3.0
