@@ -731,42 +731,96 @@ gather_draws(mv_adj_mi_ks, `b_tsc.*|bsp_tsc.*`, regex = TRUE) |>
 ```
 
 ```{r mcmc-intervals-ks}
-#get_variables(mv_adj_mi_ks) |> head()
-mcmc_draws <- as_draws_rvars(mv_adj_mi_ks)
-
-parameter <- names(mcmc_draws)
-rvars <- map_vec(mcmc_draws, \(x) x[[1]])
-mcmc_df <- tibble(
-  parameter = parameter,
-  rvar = rvars
+# Calculate centering and scaling constants
+mean_ses <- mean(health_data$ses_mean, na.rm = TRUE)
+sd_ses_mean <- stats::sd(health_data$ses_mean, na.rm = TRUE)
+sd_nature_connectedness <- stats::sd(
+  health_data$nature_connectedness,
+  na.rm = TRUE
 )
+sd_ses_centered <- stats::sd(health_data$ses_centered, na.rm = TRUE)
+sd_garden_score <- stats::sd(health_data$garden_score, na.rm = TRUE)
+sd_natural_elements_score <- stats::sd(
+  health_data$natural_elements_score,
+  na.rm = TRUE
+)
+sd_mean_log_sirm <- stats::sd(health_data$mean_log_sirm, na.rm = TRUE)
 
-mcmc_df <- mcmc_df |>
-  filter(
-    grepl("^(b|bsp)_tscore", parameter)
-  ) |>  mutate(
-    parameter = gsub("^(b|bsp)_tscore", "", parameter),
-    parameter = gsub("landscape_typerural", "Rural", parameter),
-    parameter = gsub("school_contextgreen", "Green schoolyard", parameter),
-    parameter = gsub("biological_sexFemale", "Biological sex - girl", parameter),
-    parameter = gsub("natural_elements_score", "Natural elements score", parameter),
-    parameter = gsub("mises_centered", "Deviation school SES", parameter),
-    parameter = gsub("mises_mean", "Mean school SES", parameter),
-    parameter = gsub("migarden_score", "Garden score", parameter),
-    parameter = gsub("mimean_log_sirm", "Local air pollution", parameter),
-    parameter = gsub("minature_connectedness", "Nature connectedness", parameter)
-  ) |> 
-  separate_wider_delim(cols = parameter, delim = "_", names = c("response", "parameter"))
+# Extract the draws object from the brms model
+draws_df <- as_draws_df(mv_adj_mi_ks)
+
+responses <- c("tscorephy", "tscorepar", "tscorepwb", "tscoresch", "tscoresoc")
+
+for (resp in responses) {
+  # ---------------------------------------------------------
+  # RE-CENTER CATEGORICAL MAIN EFFECTS (Evaluated at Mean SES)
+  # ---------------------------------------------------------
+
+  draws_df[[paste0("b_", resp, "_school_contextgreen")]] <-
+    draws_df[[paste0("b_", resp, "_school_contextgreen")]] + 
+    (draws_df[[paste0("bsp_", resp, "_mises_mean:school_contextgreen")]] * mean_ses)
+  
+  draws_df[[paste0("b_", resp, "_landscape_typerural")]] <-
+    draws_df[[paste0("b_", resp, "_landscape_typerural")]] + 
+    (draws_df[[paste0("bsp_", resp, "_mises_mean:landscape_typerural")]] * mean_ses)
+
+  # ---------------------------------------------------------
+  # SCALE CONTINUOUS COVARIATES (To represent a 1-SD change)
+  # ---------------------------------------------------------
+  
+  # SES Mean (bsp_)
+  draws_df[[paste0("bsp_", resp, "_mises_mean")]] <- 
+    draws_df[[paste0("bsp_", resp, "_mises_mean")]] * sd_ses_mean
+    
+  draws_df[[paste0("bsp_", resp, "_mises_mean:school_contextgreen")]] <- 
+    draws_df[[paste0("bsp_", resp, "_mises_mean:school_contextgreen")]] * sd_ses_mean
+    
+  draws_df[[paste0("bsp_", resp, "_mises_mean:landscape_typerural")]] <- 
+    draws_df[[paste0("bsp_", resp, "_mises_mean:landscape_typerural")]] * sd_ses_mean
+  
+  # Other continuous covariates
+  draws_df[[paste0("bsp_", resp, "_minature_connectedness")]] <- 
+    draws_df[[paste0("bsp_", resp, "_minature_connectedness")]] * sd_nature_connectedness
+    
+  draws_df[[paste0("bsp_", resp, "_mises_centered")]] <- 
+    draws_df[[paste0("bsp_", resp, "_mises_centered")]] * sd_ses_centered
+    
+  draws_df[[paste0("bsp_", resp, "_migarden_score")]] <- 
+    draws_df[[paste0("bsp_", resp, "_migarden_score")]] * sd_garden_score
+    
+  draws_df[[paste0("bsp_", resp, "_mimean_log_sirm")]] <- 
+    draws_df[[paste0("bsp_", resp, "_mimean_log_sirm")]] * sd_mean_log_sirm
+}
+
+pvals <- pd(draws_df) %>%
+  as_tibble() %>%
+  filter(grepl("^(b_|bsp_)", x = Parameter)) |> 
+  separate_wider_delim(
+    Parameter,
+    delim = "_",
+    too_many = "merge",
+    names = c("dropme", "response", "parameter")) %>%
+  select(-dropme) %>%
+  mutate(p_value = pd_to_p(pd))
 
 ks_alldata <- mcmc_intervals_data(
-  mv_adj_mi_ks,
+  draws_df,
   regex_pars = "^(b|bsp)_tscore",
   prob = 0.5, # inner interval probability mass
   prob_outer = 0.9, # outer interval probability mass
   point_est = "median"
-) |> 
+) |>
+  separate_wider_delim(
+    parameter,
+    delim = "_",
+    too_many = "merge",
+    names = c("dropme", "response", "parameter")) %>%
+  select(-dropme) %>%
+  inner_join(
+    pvals,
+    by = c("response", "parameter")
+  ) |> 
   mutate(
-    parameter = gsub("^(b|bsp)_tscore", "", parameter),
     parameter = gsub("landscape_typerural", "Rural", parameter),
     parameter = gsub("school_contextgreen", "Green schoolyard", parameter),
     parameter = gsub("biological_sexFemale", "Biological sex - girl", parameter),
@@ -776,53 +830,73 @@ ks_alldata <- mcmc_intervals_data(
     parameter = gsub("migarden_score", "Garden score", parameter),
     parameter = gsub("mimean_log_sirm", "Local air pollution", parameter),
     parameter = gsub("minature_connectedness", "Nature connectedness", parameter)
-  ) |> 
-  separate_wider_delim(cols = parameter, delim = "_", names = c("response", "parameter")) |> 
-  mutate(
-    parameter = reorder(parameter, m)
-  ) 
+  )
 ```
 
 Figure \@ref(fig:mcmc-intervals-kidscreen-all-data)
 
-(ref:mcmc-intervals-kidscreen-all-data) Parameter estimates for the effects on physical well-being (scores are rescaled by subtracting 50 and dividing the result by 10). Point estimates represent the median of the posterior distribution. Thick and thin lines show 50% and 90% inner probability mass of the posterior distribution. Effects are with reference to urban landscape type, boys and non-green schoolyards.
+(ref:mcmc-intervals-kidscreen-all-data) Parameter estimates for the effects on physical well-being. Point estimates represent the median of the posterior distribution. Thick and thin lines show 50% and 90% inner probability mass of the posterior distribution. Effects are with reference to urban landscape type, boys and non-green schoolyards. Categorical effects were evaluated at the mean of the 'Mean school SES' variable. Continuous covariates were scaled so that estimates represent the change associated with a one standard deviation increase.
 
 ```{r mcmc-intervals-kidscreen-all-data, fig.height=6, out.width="100%", fig.cap= "(ref:mcmc-intervals-kidscreen-all-data)", message=FALSE}
 mcmc_intervals_kidscreen_all_data <- ks_alldata |>
+  mutate(
+    `Well-being` = factor(
+      response,
+      levels = kidscreen_groups$level,
+      labels = kidscreen_groups$short_label
+    ),
+    parameter = reorder(parameter, desc(m))
+  ) |> 
   filter(
     parameter != "Intercept") |>
+  mutate(
+    p_val_label = case_when(
+      p_value <= 0.05 ~ "*",
+      p_value <= 0.1 ~ "^",
+      TRUE ~ ""
+    )
+  ) |> 
   ggplot() +
   geom_vline(xintercept = 0, alpha = 0.5) +
   geom_linerange(
     aes(
-      x = m,
-      xmin = ll,
-      xmax = hh,
+      x = m * 10,
+      xmin = ll * 10,
+      xmax = hh * 10,
       y = parameter,
-      colour = response
+      colour = `Well-being`
     ),
-    linewidth = 1, alpha = 0.5, position = position_dodge(width = 0.5)
+    linewidth = 1, alpha = 0.5, position = position_dodge(width = 0.7)
   ) +
   geom_linerange(
     aes(
-      x = m,
-      xmin = l,
-      xmax = h,
+      x = m * 10,
+      xmin = l * 10,
+      xmax = h * 10,
       y = parameter,
-      colour = response
+      colour = `Well-being`
     ),
-    linewidth = 2, alpha = 0.5, position = position_dodge(width = 0.5)
+    linewidth = 2, alpha = 0.5, position = position_dodge(width = 0.7)
   ) +
   geom_point(
     aes(
-      x = m,
+      x = m * 10,
       y = parameter,
-      colour = response
+      colour = `Well-being`
     ),
-    size = 3, alpha = 0.5, position = position_dodge(width = 0.5)
+    size = 3, alpha = 0.5, position = position_dodge(width = 0.7)
+  ) +
+  geom_text(
+    aes(
+      x = hh * 10 + 1,
+      y = parameter,
+      label = p_val_label,
+      colour = `Well-being`
+    ),
+    position = position_dodge(width = 0.7), show.legend = FALSE
   ) +
   labs(
-    x = "Self-reported physical well-being (KIDSCREEN)"
+    x = "Estimated effect on self-reported well-being (KIDSCREEN-27)"
   ) +
   theme(axis.title.y = element_blank())
 
