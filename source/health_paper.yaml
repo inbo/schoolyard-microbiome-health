@@ -1,0 +1,304 @@
+---
+references:
+- id: antonakis2021
+  accessed: "08:05:52"
+  author:
+  - family: Antonakis
+    given: John
+  - family: Bastardoz
+    given: Nicolas
+  - family: Rönkkö
+    given: Mikko
+  container-title: Organizational Research Methods
+  container-title-short: Organizational Research Methods
+  DOI: 10.1177/1094428119877457
+  ISSN: 1094-4281
+  issue: 2
+  issued: 2021-04-01
+  key: WSRV8DW2
+  language: en
+  libraryID: 1
+  page: 443-483
+  providerKey: 2509FBBE-5BB0-44C4-B119-6083A81ED673
+  Publisher: SAGE
+  source: SAGE Journals
+  title: "On Ignoring the Random Effects Assumption in Multilevel
+    Models: Review, Critique, and Recommendations"
+  title-short: On Ignoring the Random Effects Assumption in Multilevel
+    Models
+  type: article-journal
+  URL: "https://doi.org/10.1177/1094428119877457"
+  volume: 24
+- id: bell2015
+  accessed: 2014-07-23
+  author:
+  - family: Bell
+    given: Andrew
+  - family: Jones
+    given: Kelvyn
+  container-title: Political Science Research and Methods
+  DOI: 10.1017/psrm.2014.7
+  ISSN: 2049-8470
+  issue: 01
+  issued: 2015-01-01
+  key: Z25DCLPS
+  libraryID: 1
+  page: 133-153
+  providerKey: 2509FBBE-5BB0-44C4-B119-6083A81ED673
+  title: "Explaining Fixed Effects: Random Effects Modeling of
+    Time-Series Cross-Sectional and Panel Data"
+  type: article-journal
+  URL: "http://www.journals.cambridge.org/abstract_S2049847014000077"
+  volume: 3
+- id: reynders2005
+  author:
+  - family: Reynders
+    given: Tineke
+  - family: Nicaise
+    given: Ides
+  - family: Van Damme
+    given: Jan
+  issued: 2005-01-01
+  key: XXA3YFF5
+  libraryID: 1
+  providerKey: 2509FBBE-5BB0-44C4-B119-6083A81ED673
+  publisher: Steunpunt "Loopbanen doorheen Onderwijs naar Arbeidsmarkt",
+    Cel "Schoolloopbanen in het basisonderwijs" (SiBO); Leuven
+  title: "Longitudinaal onderzoek in het basisonderwijs: de constructie
+    van een SES-variabele voor het SIBO-onderzoek (LOA-rapport nr. 31)"
+  type: book
+- id: lifewatch2023
+  accessed: "10:21:47"
+  author:
+  - family: Lifewatch
+  issued: 2023
+  key: YME82P7S
+  libraryID: 1
+  providerKey: 2509FBBE-5BB0-44C4-B119-6083A81ED673
+  title: "Lifewatch-FWB : UCL - Geomatics"
+  type: webpage
+  URL: "https://maps.elie.ucl.ac.be/lifewatch/ecotopes.html?lang=en"
+- id: rosenbaum2010
+  author:
+  - family: Rosenbaum
+    given: Paul R.
+  ISBN: 978-1-4419-1212-1
+  issued: 2010
+  key: 9C76NUKD
+  libraryID: 1
+  note: "Series Title: Springer Series in Statistics DOI:
+    10.1007/978-1-4419-1213-8"
+  providerKey: 2509FBBE-5BB0-44C4-B119-6083A81ED673
+  publisher: Springer New York
+  publisher-place: New York, NY Series in Statistics
+  DOI: 10.1007/978-1-4419-1213-8
+  Series Title: Springer
+  title: Design of Observational Studies
+  type: book
+  URL: "http://link.springer.com/10.1007/978-1-4419-1213-8"
+- id: ravens-sieberer2014
+  accessed: 2018-10-22
+  author:
+  - family: Ravens-Sieberer
+    given: Ulrike
+  - family: Herdman
+    given: Michael
+  - family: Devine
+    given: Janine
+  - family: Otto
+    given: Christiane
+  - family: Bullinger
+    given: Monika
+  - family: Rose
+    given: Matthias
+  - family: Klasen
+    given: Fionna
+  container-title: Quality of Life Research
+  DOI: 10.1007/s11136-013-0428-3
+  ISSN: 0962-9343
+  issue: 3
+  issued: 2014-04-18
+  key: MEBYHUY4
+  libraryID: 1
+  page: 791-803
+  providerKey: 2509FBBE-5BB0-44C4-B119-6083A81ED673
+  Publisher: Springer
+  title: "The European KIDSCREEN approach to measure quality of life and
+    well-being in children: development, current application, and future
+    advances"
+  type: article-journal
+  URL: "http://link.springer.com/10.1007/s11136-013-0428-3"
+  volume: 23
+- id: bürkner2017
+  accessed: 2018-01-08
+  author:
+  - family: Bürkner
+    given: Paul-Christian
+  container-title: Journal of Statistical Software
+  DOI: 10.18637/jss.v080.i01
+  ISSN: 1548-7660
+  issue: 1
+  issued: 2017-08-29
+  key: NPBYMTXE
+  libraryID: 1
+  page: 1-28
+  providerKey: 2509FBBE-5BB0-44C4-B119-6083A81ED673
+  title: "**brms** : An *R* Package for Bayesian Multilevel Models Using
+    *Stan*"
+  type: article-journal
+  URL: "http://www.jstatsoft.org/v80/i01/"
+  volume: 80
+- id: gabry2025
+  author:
+  - family: Gabry
+    given: Jonah
+  - family: Češnovar
+    given: Rok
+  - family: Johnson
+    given: Andrew
+  - family: Bronder
+    given: Steve
+  genre: manual
+  issued: 2025
+  key: 9AHC7ZIZ
+  libraryID: 1
+  providerKey: Zotero
+  title: "cmdstanr: R Interface to \"CmdStan\""
+  type: report
+  URL: "https://mc-stan.org/cmdstanr/"
+- id: rcoreteam2025
+  author:
+  - family: R Core Team
+  genre: manual
+  issued: 2025
+  key: SYZSWZ4W
+  libraryID: 1
+  providerKey: Zotero
+  publisher: R Foundation for Statistical Computing
+  publisher-place: Vienna, Austria
+  title: "R: a language and environment for statistical computing"
+  type: report
+  URL: "https://www.R-project.org/"
+- id: aerts2025
+  accessed: "07:54:19"
+  author:
+  - family: Aerts
+    given: Raf
+  - family: Van Calster
+    given: Hans
+  - family: Ozen
+    given: Melike
+  - family: Benchrih
+    given: Rafiqa
+  - family: Heyman
+    given: Sophie
+  - family: Swerts
+    given: Edith
+  - family: Wuyts
+    given: Arlien
+  - family: Lammens
+    given: Liesa
+  - family: Lommelen
+    given: Els
+  - family: Leone
+    given: Michael
+  - family: Wanner
+    given: Saskia
+  - family: Brulein
+    given: Harmony
+  - family: Groslambert
+    given: Antoine
+  - family: Vanmeersche
+    given: Linda
+  - family: Legein
+    given: Marie
+  - family: Smets
+    given: Wenke
+  - family: Spacova
+    given: Irina
+  - family: De Clercq
+    given: Eva M.
+  - family: Lebeer
+    given: Sarah
+  - family: Leonard
+    given: Anna
+  - family: Vanwambeke
+    given: Sophie O.
+  - family: Keune
+    given: Hans
+  citationKey: aerts2025
+  container-title: Urban Forestry & Urban Greening
+  container-title-short: Urban Forestry & Urban Greening
+  DOI: 10.1016/j.ufug.2025.128680
+  ISSN: 1618-8667
+  issued: 2025-03-01
+  key: AL99CCZX
+  libraryID: 1
+  page: 128680
+  providerKey: 2509FBBE-5BB0-44C4-B119-6083A81ED673
+  source: ScienceDirect
+  title: "Green space at school and attention in primary school children
+    in Belgium: A stratified matched case-control study"
+  title-short: Green space at school and attention in primary school
+    children in Belgium
+  type: article-journal
+  URL: "https://www.sciencedirect.com/science/article/pii/S1618866725000147"
+  volume: 105
+- id: vancalster2024
+  accessed: "13:53:00"
+  author:
+  - family: Van Calster
+    given: Hans
+  - family: Lommelen
+    given: Els
+  - family: Groslambert
+    given: Antoine
+  - family: Leonard
+    given: Anna
+  - family: Vanmeersche
+    given: Linda
+  - family: Brulein
+    given: Harmony
+  - family: Vanwambeke
+    given: Sophie O.
+  - family: Aerts
+    given: Raf
+  - family: De Clercq
+    given: Eva M.
+  - family: Benchrih
+    given: Rafiqa
+  - family: Melike
+    given: Ozen
+  - family: Carmen
+    given: Raïsa
+  - family: Lammens
+    given: Liesa
+  - family: Leone
+    given: Michael
+  - family: Wanner
+    given: Saskia
+  - family: Lebeer
+    given: Sarah
+  - family: Legein
+    given: Marie
+  - family: Smets
+    given: Wenke
+  - family: Spacova
+    given: Irina
+  - family: Keune
+    given: Hans
+  citationKey: vancalster2024a
+  DOI: 10.5281/zenodo.10527033
+  issued: 2024-02-05
+  key: PXSM2LAT
+  language: eng
+  libraryID: 1
+  providerKey: 2509FBBE-5BB0-44C4-B119-6083A81ED673
+  publisher: Research Institute for Nature and Forest (INBO)
+  source: Zenodo
+  title: Data from a cross-sectional study of fifth grade children in a
+    sample of primary schools in Belgium that differ in amount of
+    greenness at school and landscape level
+  type: article-journal
+  URL: "https://zenodo.org/records/10527033"
+...
