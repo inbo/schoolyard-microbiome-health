@@ -1,4 +1,5 @@
 <!-- badges: start -->
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21296003.svg)](https://doi.org/10.5281/zenodo.21296003)
 [![website](https://img.shields.io/badge/website-https://www.uantwerpen.be/nl/projecten/baseball/-c04384)](https://www.uantwerpen.be/nl/projecten/baseball/)
 ![Language: en-GB](https://img.shields.io/badge/language-en--GB-c04384)
 [![CC BY 4.0](https://img.shields.io/badge/License-CC_BY_4.0-brightgreen)](https://raw.githubusercontent.com/inbo/citeme/refs/heads/main/inst/licenses/cc_by_4_0.md)
