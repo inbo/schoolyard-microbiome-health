@@ -35,4 +35,4 @@ abstract: "Code and supplementary data for the paper: Environmental bacteria lin
 identifiers:
 - type: url
   value: https://www.uantwerpen.be/nl/projecten/baseball/
-version: 0.0.0
+version: 0.1.0
