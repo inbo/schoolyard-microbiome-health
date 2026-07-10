@@ -29,12 +29,14 @@
 [^rev]: reviewer
 [^UnoA]: University of Antwerp
 
-**keywords**:  environmental health; allergy; well-being; reproducible research; microbiome
+**keywords**:  environmental health; allergy; well-being; reproducible research; microbiome; rhinitis; wheezing; eczema; biodiversity; greening
 
 <!-- community: inbo -->
 
 <!-- description: start -->
-Code and supplementary data for the paper: Environmental bacteria link green schoolyards to better child well-being and fewer allergy symptoms.
+Code and supplementary data for the paper: Smets et al. (2026). Environmental bacteria link green schoolyards to better child well-being and fewer allergy symptoms. in review at Nature Communications.
 <!-- description: end -->
 
 To reproduce the analyses, follow instructions in the R script located at `source/reproduce.R`.
+
+This project was supported by [BELSPO](https://www.belspo.be/) under Contract - B2/191/P3/B@SEBALL.

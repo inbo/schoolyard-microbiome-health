@@ -21,6 +21,11 @@ keywords:
 - well-being
 - reproducible research
 - microbiome
+- rhinitis
+- wheezing
+- eczema
+- biodiversity
+- greening
 contact:
 - given-names: Hans
   family-names: Van Calster
@@ -30,8 +35,9 @@ doi: ~
 license: CC BY 4.0
 repository-code: https://github.com/inbo/schoolyard-microbiome-health/
 type: software
-abstract: "Code and supplementary data for the paper: Environmental bacteria link
-  green schoolyards to better child well-being and fewer allergy symptoms."
+abstract: "Code and supplementary data for the paper: Smets et al. (2026). Environmental
+  bacteria link green schoolyards to better child well-being and fewer allergy symptoms.
+  in review at Nature Communications."
 identifiers:
 - type: url
   value: https://www.uantwerpen.be/nl/projecten/baseball/

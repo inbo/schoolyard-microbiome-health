@@ -4,13 +4,18 @@
   "access_right": "open",
   "language": "eng",
   "title": "Repository for Environmental bacteria link green schoolyards to better child well-being and fewer allergy symptoms.",
-  "description": "<p>Code and supplementary data for the paper: Environmental bacteria link green schoolyards to better child well-being and fewer allergy symptoms.<\/p>",
+  "description": "<p>Code and supplementary data for the paper: Smets et al. (2026). Environmental bacteria link green schoolyards to better child well-being and fewer allergy symptoms. in review at Nature Communications.<\/p>",
   "keywords": [
     "environmental health",
     "allergy",
     "well-being",
     "reproducible research",
-    "microbiome"
+    "microbiome",
+    "rhinitis",
+    "wheezing",
+    "eczema",
+    "biodiversity",
+    "greening"
   ],
   "upload_type": "software",
   "contributors": [
