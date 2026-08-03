@@ -604,7 +604,7 @@ fit3 <- radEmu::emuFit(
 )
 fit4 <- radEmu::emuFit(
   formula = ~ allergy_symptoms, data = samp, Y = y,
-  test_kj = data.frame(k = "allergy_symptons", j = seq_len(ncol(y))),
+  test_kj = data.frame(k = "allergy_symptoms", j = seq_len(ncol(y))),
   tolerance = 1e-2
 )
 
