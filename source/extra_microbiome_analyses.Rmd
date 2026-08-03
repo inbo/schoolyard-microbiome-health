@@ -15,21 +15,15 @@ editor_options:
 
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(
+library(knitr)
+library(here)
+opts_chunk$set(
   echo = TRUE,
   message = FALSE,
   warning = FALSE,
   fig.width = 8,
   fig.height = 6
 )
-```
-
-# Setting up
-
-```{r setup2, include=FALSE}
-library(knitr)
-library(here)
-opts_chunk$set(echo = TRUE)
 opts_knit$set(root.dir = here())
 library(frictionless)
 library(tidytacos)
@@ -45,6 +39,22 @@ library(lme4)
 conflicted::conflicts_prefer(dplyr::select)
 
 "%!in%" <- function(x, y) !("%in%"(x, y))
+
+# Copied from tidytacos:::tidy_count_to_matrix (internal, not exported)
+# tidytacos version: 1.0.9
+tidy_count_to_matrix <- function(counts, value = count) {
+  if (!is.data.frame(counts) || is.null(counts$taxon_id) || is.null(counts$sample_id)) {
+    stop("first argument should be a counts table (data frame)")
+  }
+  value <- rlang::enquo(value)
+  counts_wide <- counts %>%
+    dplyr::select(sample_id, taxon_id, !!value) %>%
+    tidyr::spread(key = taxon_id, value = !!value, fill = 0)
+  counts_wide %>%
+    dplyr::select(-sample_id) %>%
+    as.matrix() %>%
+    `row.names<-`(counts_wide$sample_id)
+}
 ```
 
 ```{r cache=TRUE, results='hide'}
@@ -580,9 +590,17 @@ mostprevplant <- y1$taxa %>%
 ggplot(y1$taxa, aes(x = prevalence)) +
   geom_histogram()
 
-samp <- select(y1$samples, sample_id, meaneczema, meanrhinitis, meanwheezing, allergy_symptoms, school_id)
+samp <- select(
+  y1$samples,
+  sample_id,
+  meaneczema,
+  meanrhinitis,
+  meanwheezing,
+  allergy_symptoms,
+  school_id
+)
 rownames(samp) <- samp$sample_id
-y <- tidytacos:::tidy_count_to_matrix(y1$counts)[samp$sample_id, ]
+y <- tidy_count_to_matrix(y1$counts)[samp$sample_id, ]
 
 # differential abundance analysis with radEmu
 # increase tolerance for more reliable pvalues, at the cost of longer runtime
@@ -739,7 +757,7 @@ samp <- select(
   allergy_symptoms, school_id
 )
 rownames(samp) <- samp$sample_id
-y <- tidytacos:::tidy_count_to_matrix(y1$counts)[samp$sample_id, ]
+y <- tidy_count_to_matrix(y1$counts)[samp$sample_id, ]
 design <- radEmu::make_design_matrix(formula = ~ sample_type + meaneczema, data = samp)
 colnames(design)
 
