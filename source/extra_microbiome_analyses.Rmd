@@ -2030,7 +2030,7 @@ runm <- runs %>%
   mutate_samples(sample_type_gen = "skin") %>%
   filter_samples(school_id %in% schools) %>%
   merge_tidytacos(runp, taxon_identifier = taxon) %>%
-  select_taxa(-genus_oldtaxonomy, -length, -species) %>%
+  select_taxa(-species) %>%
   add_taxon_name()
 
 taxov <- taxn %>%
@@ -2053,7 +2053,7 @@ for (sid in schools) {
     taxa()
   taxon <- intersect(sktax$taxon, envtax$taxon)
   overl <- tibble(taxon) %>%
-    left_join(taxnames)
+    left_join(taxnames, by = join_by(taxon))
   for (t in tax) {
     if (t %in% overl$taxon_name) {
       overlap <- overlap %>%
@@ -2089,7 +2089,7 @@ transfer <- runs %>%
 
 trov <- overlap %>%
   mutate(school = number / 30) %>%
-  left_join(transfer) %>%
+  left_join(transfer, by = join_by(taxon_name_overall)) %>%
   select(-taxon_name, -taxon, -number)
 
 trov2 <- trov %>%
