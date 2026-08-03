@@ -37,6 +37,7 @@ library(forcats)
 library(lme4)
 
 conflicted::conflicts_prefer(dplyr::select)
+conflicted::conflicts_prefer(dplyr::filter)
 
 "%!in%" <- function(x, y) !("%in%"(x, y))
 
