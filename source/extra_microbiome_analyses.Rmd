@@ -42,6 +42,8 @@ library(stringr)
 library(forcats)
 library(lme4)
 
+conflicted::conflicts_prefer(dplyr::select)
+
 "%!in%" <- function(x, y) !("%in%"(x, y))
 ```
 
