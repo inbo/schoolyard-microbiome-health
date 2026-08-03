@@ -546,7 +546,7 @@ taxn <- taxn$taxa %>%
 Are 100 most prevalent plant taxa related to any of the allergies?
 (this code could take a while to run!)
 
-```{r}
+```{r rademu-plant-samples}
 # pooling 3 plant samples per school
 y1 <- rune %>%
   filter_samples(sample_type == "plant") %>%
@@ -606,25 +606,30 @@ y <- tidy_count_to_matrix(y1$counts)[samp$sample_id, ]
 # differential abundance analysis with radEmu
 # increase tolerance for more reliable pvalues, at the cost of longer runtime
 #radEmu::make_design_matrix(formula = ~ meaneczema, data = samp, Y = y)
-fit1 <- radEmu::emuFit(
-  formula = ~ meaneczema, data = samp, Y = y,
-  test_kj = data.frame(k = "meaneczema", j = seq_len(ncol(y))),
-  tolerance = 1e-2
-)
-fit2 <- radEmu::emuFit(
-  formula = ~ meanrhinitis, data = samp, Y = y,
-  test_kj = data.frame(k = "meanrhinitis", j = seq_len(ncol(y))),
-  tolerance = 1e-2
-)
-fit3 <- radEmu::emuFit(
-  formula = ~ meanwheezing, data = samp, Y = y,
-  test_kj = data.frame(k = "meanwheezing", j = seq_len(ncol(y))),
-  tolerance = 1e-2
-)
-fit4 <- radEmu::emuFit(
-  formula = ~ allergy_symptoms, data = samp, Y = y,
-  test_kj = data.frame(k = "allergy_symptoms", j = seq_len(ncol(y))),
-  tolerance = 1e-2
+xfun::cache_exec(
+  {
+    fit1 <- radEmu::emuFit(
+      formula = ~ meaneczema, data = samp, Y = y,
+      test_kj = data.frame(k = "meaneczema", j = seq_len(ncol(y))),
+      tolerance = 1e-2
+    )
+    fit2 <- radEmu::emuFit(
+      formula = ~ meanrhinitis, data = samp, Y = y,
+      test_kj = data.frame(k = "meanrhinitis", j = seq_len(ncol(y))),
+      tolerance = 1e-2
+    )
+    fit3 <- radEmu::emuFit(
+      formula = ~ meanwheezing, data = samp, Y = y,
+      test_kj = data.frame(k = "meanwheezing", j = seq_len(ncol(y))),
+      tolerance = 1e-2
+    )
+    fit4 <- radEmu::emuFit(
+      formula = ~ allergy_symptoms, data = samp, Y = y,
+      test_kj = data.frame(k = "allergy_symptoms", j = seq_len(ncol(y))),
+      tolerance = 1e-2
+    )
+  },
+  path = "source/extra_microbiome_analyses_cache/"
 )
 
 ecz <- fit1$coef %>%
@@ -726,7 +731,7 @@ ggplot(fplanttaxa, aes(y = covariate, x = name, fill = estimate)) +
 
 (Figure in supplementary materials)
 
-```{r}
+```{r rademu-sanddirtdust-samples}
 y1 <- rune %>%
   filter_samples(sample_type %in% c("sand", "dirt", "dust")) %>%
   select_samples(
@@ -762,35 +767,39 @@ y <- tidy_count_to_matrix(y1$counts)[samp$sample_id, ]
 design <- radEmu::make_design_matrix(formula = ~ sample_type + meaneczema, data = samp)
 colnames(design)
 
-fit1 <- radEmu::emuFit(
-  formula = ~ sample_type + meaneczema,
-  data = samp,
-  Y = y,
-  cluster = samp$school_id,
-  test_kj = data.frame(j = c(1:101), k = 4)
+xfun::cache_exec(
+  {
+    fit1 <- radEmu::emuFit(
+      formula = ~ sample_type + meaneczema,
+      data = samp,
+      Y = y,
+      cluster = samp$school_id,
+      test_kj = data.frame(j = c(1:101), k = 4)
+    )
+    fit2 <- radEmu::emuFit(
+      formula = ~ sample_type + meanrhinitis,
+      data = samp,
+      Y = y,
+      cluster = samp$school_id,
+      test_kj = data.frame(j = c(1:101), k = 4)
+    )
+    fit3 <- radEmu::emuFit(
+      formula = ~ sample_type + meanwheezing,
+      data = samp,
+      Y = y,
+      cluster = samp$school_id,
+      test_kj = data.frame(j = c(1:101), k = 4)
+    )
+    fit4 <- radEmu::emuFit(
+      formula = ~ sample_type + allergy_symptoms,
+      data = samp,
+      Y = y,
+      cluster = samp$school_id,
+      test_kj = data.frame(j = c(1:101), k = 4)
+    )
+  },
+  path = "source/extra_microbiome_analyses_cache/"
 )
-fit2 <- radEmu::emuFit(
-  formula = ~ sample_type + meanrhinitis,
-  data = samp,
-  Y = y,
-  cluster = samp$school_id,
-  test_kj = data.frame(j = c(1:101), k = 4)
-)
-fit3 <- radEmu::emuFit(
-  formula = ~ sample_type + meanwheezing,
-  data = samp,
-  Y = y,
-  cluster = samp$school_id,
-  test_kj = data.frame(j = c(1:101), k = 4)
-)
-fit4 <- radEmu::emuFit(
-  formula = ~ sample_type + allergy_symptoms,
-  data = samp,
-  Y = y,
-  cluster = samp$school_id,
-  test_kj = data.frame(j = c(1:101), k = 4)
-)
-
 ecz <- fit1$coef %>%
   filter(covariate == "meaneczema") %>%
   mutate(taxon_id = category) %>%
@@ -887,7 +896,7 @@ ggplot(fsoiltaxa, aes(y = covariate, x = name, fill = estimate)) +
 
 (this code could take a while to run!)
 
-```{r}
+```{r rademu-skin-samples}
 y1 <- runs %>%
   add_prevalence()
 
@@ -931,29 +940,38 @@ samp <- select(y1$samples,
 rownames(samp) <- samp$sample_id
 y <- tidy_count_to_matrix(y1$counts)[samp$sample_id, ]
 
-fit1 <- radEmu::emuFit(
-  formula = ~ Eczema,
-  data = samp,
-  Y = y,
-  cluster = samp$school_id
-)
-fit2 <- radEmu::emuFit(
-  formula = ~ Rhinitis,
-  data = samp,
-  Y = y,
-  cluster = samp$school_id
-)
-fit3 <- radEmu::emuFit(
-  formula = ~ Wheezing,
-  data = samp,
-  Y = y,
-  cluster = samp$school_id
-)
-fit4 <- radEmu::emuFit(
-  formula = ~ allergy_symptoms,
-  data = samp,
-  Y = y,
-  cluster = samp$school_id
+xfun::cache_exec(
+  {
+    fit1 <- radEmu::emuFit(
+      formula = ~ Eczema,
+      data = samp,
+      Y = y,
+      cluster = samp$school_id,
+      test_kj = data.frame(k = "Eczema", j = seq_len(ncol(y)))
+    )
+    fit2 <- radEmu::emuFit(
+      formula = ~ Rhinitis,
+      data = samp,
+      Y = y,
+      cluster = samp$school_id,
+      test_kj = data.frame(k = "Rhinitis", j = seq_len(ncol(y)))
+    )
+    fit3 <- radEmu::emuFit(
+      formula = ~ Wheezing,
+      data = samp,
+      Y = y,
+      cluster = samp$school_id,
+      test_kj = data.frame(k = "Wheezing", j = seq_len(ncol(y)))
+    )
+    fit4 <- radEmu::emuFit(
+      formula = ~ allergy_symptoms,
+      data = samp,
+      Y = y,
+      cluster = samp$school_id,
+      test_kj = data.frame(k = "allergy_symptoms", j = seq_len(ncol(y)))
+    )
+  },
+  path = "source/extra_microbiome_analyses_cache/"
 )
 
 ecz <- fit1$coef %>%
@@ -985,8 +1003,6 @@ sym <- fit4$coef %>%
 sym
 
 skintaxa <- rbind(ecz, rhi, whe, sym)
-skintaxa <- skintaxa %>%
-  mutate(name = paste(name, no, sep = " "))
 
 sigtax <- skintaxa %>%
   filter(pval < 0.05 &
@@ -1142,7 +1158,6 @@ for (c in classes) {
 }
 glmer_outcome <- tibble(class, outcome, rs, est, p) %>%
   filter(rs %in% c("Richness", "None"))
-#View(glmer_outcome)
 ```
 
 
