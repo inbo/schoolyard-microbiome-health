@@ -1,5 +1,5 @@
 ---
-title: "B@SEBALL additional microbiome analyses"
+title: "Additional microbiome analyses for _Environmental bacteria link green schoolyards to better child well-being and fewer allergy symptoms_"
 author: "Wenke Smets, Hans Van Calster"
 date: "`r Sys.Date()`"
 output:
@@ -2094,26 +2094,37 @@ trov <- overlap %>%
 
 trov2 <- trov %>%
   pivot_longer(!taxon_name_overall, names_to = "type_of_transfer", values_to = "number")
+```
 
+
+```{r fig-transfer-school-child-1, fig.height=200/25.4}
 # these figures compare transfer per school with transfer per child
-
-ggplot(trov2, aes(x = reorder(taxon_name_overall, -number), y = number, fill = type_of_transfer)) +
+ggplot(
+  trov2,
+  aes(
+    y = reorder(taxon_name_overall, -number),
+    x = number,
+    fill = type_of_transfer)
+  ) +
   stat_summary(geom = "col", width = 0.8, position = position_dodge()) +
   xlab("Taxon") +
   ylab("Times transferred") +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 90))
+  theme_bw()
+```
 
+
+```{r fig-transfer-school-child-2}
 ggplot(trov, aes(x = child, y = school)) +
   geom_point() +
   geom_smooth(method = "lm") +
   xlab("Transfer children") +
   ylab("Transfer schools") +
   theme_bw()
+```
 
+
+```{r fig-transfer-plant-child-1, fig.height=200/25.4}
 # this figure shows transfer per child in the plant ASV heatmap
-
-
 planttaxa2 <- planttaxa %>%
   #  filter(pval<0.05)%>%
   rename(taxon_name_overall = taxon_name) %>%
@@ -2129,7 +2140,8 @@ transfer2 <- transfer %>%
   select(-child)
 planttaxa2 <- rbind(planttaxa2, transfer2)
 
-ggplot(planttaxa2, aes(y = covariate, x = taxon_name_overall, fill = estimate)) +
+ggplot(planttaxa2,
+       aes(y = covariate, x = taxon_name_overall, fill = estimate)) +
   geom_tile() +
   scale_fill_gradient2(low = "darkgreen", mid = "white", high = "darkorange") +
   geom_text(aes(label = significance), color = "black", size = 2) +
@@ -2137,7 +2149,10 @@ ggplot(planttaxa2, aes(y = covariate, x = taxon_name_overall, fill = estimate)) 
   ylab("") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = -45, hjust = 0))
+```
 
+
+```{r fig-transfer-plant-child-2}
 ggplot(transfer2, aes(x = taxon_name_overall, y = significance)) +
   geom_bar(stat = "identity") +
   ylab("prev. in children") +
@@ -2145,5 +2160,7 @@ ggplot(transfer2, aes(x = taxon_name_overall, y = significance)) +
   theme_bw() +
   theme(axis.text.x = element_blank())
 ```
+
+
 
 
