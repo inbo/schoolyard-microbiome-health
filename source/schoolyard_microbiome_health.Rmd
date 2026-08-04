@@ -2447,7 +2447,7 @@ pe |>
     aes(
       x = ses_mean,
       y = oddsratio),
-    alpha = 0.4
+    alpha = 0.9
   ) +
   geom_hline(yintercept = 1) +
   scale_y_continuous(
