@@ -4,9 +4,13 @@
 # schoolyard-microbiome-health.Rproj file.
 # If you are using RStudio and started the project by opening this file with
 # RStudio, your working directory will be correct.
+#
 # For instructions on how to clone a repository, see
 # https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository
-
+#
+# If you are using the Windows operating system, please also install Rtools 4.5
+# see https://cran.r-project.org/bin/windows/Rtools/rtools45/rtools.html for
+# installation instructions
 
 if (!"renv" %in% rownames(installed.packages())) {
   install.packages("renv")
@@ -41,8 +45,9 @@ download_zenodo(
 utils::unzip(here("data", "data_packages.zip"), exdir = here("data"))
 
 
-# knit the Rmarkdown file containing the supplementary material
-# this will take a while the first time (1-2 hours)
+# knit the Rmarkdown files containing the supplementary material
+# this will take a while the first time
+# (1-2 hours for the first file and 3-6 hours for the second file)
 # model objects are saved as rds files and the report will be rendered to html
 # the latter will be saved in a folder ./output
 if (!dir.exists(here("output"))) {
