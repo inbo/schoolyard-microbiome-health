@@ -1890,19 +1890,6 @@ shapiro.test(data$mean_richness)
 ggplot(data, aes(mean_richness)) +
   geom_histogram()
 
-
-mod <- glmmTMB(
-  mean_richness ~ landscape_type + school_context
-  + (1 | sample_type)
-  + (1 | total_count)
-  + (1 | school_id), family = poisson, data = data)
-mod <- glmmTMB(
-  mean_richness ~ landscape_type + school_context
-  + (1 | sample_type) + (1 | total_count) + (1 | school_id),
-  family = nbinom1(link = "log"), data = data) # nbinom slightly smaller AIC, but for consistency kept poisson
-AIC(mod)
-summary(mod)
-
 rsq <- c()
 pv <- c()
 ste <- c()
