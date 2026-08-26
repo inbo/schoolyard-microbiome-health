@@ -1659,10 +1659,6 @@ p
 # alphas for environment: inverse simpson
 
 ```{r}
-school_phy <- runs$samples %>%
-  group_by(school_id) %>%
-  summarize(mean_score_phy = mean(t_score_phy))
-
 runer <- rune %>%
   add_total_count() %>%
   add_alpha(method = "invsimpson") %>%
@@ -1705,37 +1701,9 @@ sdata <- rune %>%
 
 data <- simps %>%
   left_join(obs) %>%
-  left_join(school_phy) %>%
   left_join(select(sdata$samples, -sample_id))
 
 # expect negative binomial or poisson distribution
-
-mod <- glmmTMB(
-  mean_simpson ~ natural_elements_score + school_context + (1 | school_id) +
-    (1 |  sample_type) + (1 | total_count:sample_type),
-  family = nbinom1(link = "log"),
-  data = data
-)
-AIC(mod)
-car::Anova(mod)
-coef(summary(mod))
-
-shapiro.test(data$mean_simpson)
-
-mod <- glmmTMB(
-  mean_simpson ~ landscape_type + school_context
-  + (1 | sample_type) + (1 | total_count) + (1 | school_id),
-  family = poisson,
-  data = data
-)
-mod <- glmmTMB(
-  mean_simpson ~ landscape_type + school_context
-  + (1 | sample_type) + (1 | total_count) + (1 | school_id),
-  family = nbinom1(link = "log"),
-  data = data
-)
-AIC(mod)
-summary(mod)
 
 rsq <- c()
 pv <- c()
@@ -1851,7 +1819,7 @@ p <- ggplot(perm, aes(x = factors, y = rsq)) +
   scale_alpha_manual(values = c(0, 1), guide = "none") +
   geom_hline(yintercept = 0,
              linetype = "dotted",
-             size = 0.5) +
+             linewidth = 0.5) +
   #  scale_y_continuous(trans="log10") +
   scale_x_discrete(
     labels = c(
