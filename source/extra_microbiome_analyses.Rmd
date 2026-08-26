@@ -2097,31 +2097,6 @@ trov2 <- trov %>%
 ```
 
 
-```{r fig-transfer-school-child-1, fig.height=200/25.4}
-# these figures compare transfer per school with transfer per child
-ggplot(
-  trov2,
-  aes(
-    y = reorder(taxon_name_overall, -number),
-    x = number,
-    fill = type_of_transfer)
-  ) +
-  stat_summary(geom = "col", width = 0.8, position = position_dodge()) +
-  xlab("Taxon") +
-  ylab("Times transferred") +
-  theme_bw()
-```
-
-
-```{r fig-transfer-school-child-2}
-ggplot(trov, aes(x = child, y = school)) +
-  geom_point() +
-  geom_smooth(method = "lm") +
-  xlab("Transfer children") +
-  ylab("Transfer schools") +
-  theme_bw()
-```
-
 
 ```{r fig-transfer-plant-child-1, fig.height=200/25.4}
 # this figure shows transfer per child in the plant ASV heatmap
