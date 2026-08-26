@@ -1701,7 +1701,14 @@ sdata <- rune %>%
 
 data <- simps %>%
   left_join(obs) %>%
-  left_join(select(sdata$samples, -sample_id))
+  left_join(select(sdata$samples, -sample_id)) |> 
+  mutate(
+    sample_type = factor(
+      sample_type,
+      levels = c("dirt", "dust", "sand", "plant"),
+      labels = c("ground", "ground", "ground", "plant")
+    )
+  )
 
 # expect negative binomial or poisson distribution
 
@@ -1718,9 +1725,9 @@ factors <- c(
 ) # "allergy_symptoms", "mean_score_phy", "meaneczema", "meanrhinitis", "meanwheezing","no2" , "pm10", "pm25", "bc",
 mod <- glmmTMB(
   mean_simpson ~ sirm 
-  + (1 | landscape_type) + (1 | sample_type) + (1 | total_count) 
+  + offset(log(total_count))
   + (1 | school_id),
-  family = poisson, data = data
+  family = Gamma(link = "log"), data = data
 )
 rsq <- append(rsq, coef(summary(mod))$cond[2, 1])
 pv <- append(pv, coef(summary(mod))$cond[2, 4])
@@ -1728,11 +1735,9 @@ ste <- append(ste, coef(summary(mod))$cond[2, 2])
 
 mod <- glmmTMB(
   mean_simpson ~ school_ses
-  + (1 | landscape_type)
-  + (1 | sample_type)
-  + (1 | total_count)
+  + offset(log(total_count))
   + (1 | school_id),
-  family = poisson, data = data
+  family = Gamma(link = "log"), data = data
 )
 rsq <- append(rsq, coef(summary(mod))$cond[2, 1])
 pv <- append(pv, coef(summary(mod))$cond[2, 4])
@@ -1740,10 +1745,9 @@ ste <- append(ste, coef(summary(mod))$cond[2, 2])
 
 mod <- glmmTMB(
   mean_simpson ~ landscape_type
-  + (1 | sample_type)
-  + (1 | total_count)
+  + offset(log(total_count))
   + (1 | school_id),
-  family = poisson, data = data
+  family = Gamma(link = "log"), data = data
 )
 rsq <- append(rsq, coef(summary(mod))$cond[2, 1])
 pv <- append(pv, coef(summary(mod))$cond[2, 4])
@@ -1751,11 +1755,9 @@ ste <- append(ste, coef(summary(mod))$cond[2, 2])
 
 mod <- glmmTMB(
   mean_simpson ~ school_context
-  + (1 | landscape_type)
-  + (1 | sample_type)
-  + (1 | total_count)
+  + offset(log(total_count))
   + (1 | school_id),
-  family = poisson,
+  family = Gamma(link = "log"),
   data = data
 )
 rsq <- append(rsq, coef(summary(mod))$cond[2, 1])
@@ -1764,11 +1766,9 @@ ste <- append(ste, coef(summary(mod))$cond[2, 2])
 
 mod <- glmmTMB(
   mean_simpson ~ natural_elements_score
-  + (1 | landscape_type)
-  + (1 | sample_type)
-  + (1 | total_count)
+  + offset(log(total_count))
   + (1 | school_id),
-  family = poisson,
+  family = Gamma(link = "log"),
   data = data
 )
 rsq <- append(rsq, coef(summary(mod))$cond[2, 1])
@@ -1777,10 +1777,9 @@ ste <- append(ste, coef(summary(mod))$cond[2, 2])
 
 mod <- glmmTMB(
   mean_simpson ~ sample_type
-  + (1 | landscape_type)
-  + (1 | total_count)
+  + offset(log(total_count))
   + (1 | school_id),
-  family = poisson,
+  family = Gamma(link = "log"),
   data = data
 )
 rsq <- append(rsq, coef(summary(mod))$cond[2, 1])
@@ -1823,7 +1822,7 @@ p <- ggplot(perm, aes(x = factors, y = rsq)) +
   #  scale_y_continuous(trans="log10") +
   scale_x_discrete(
     labels = c(
-      "sample_type" = "Sample type",
+      "sample_type" = "Sample type (plant)",
       "no2" = "Modelled NO2",
       "pm10" = "Modelled PM10",
       "pm25" = "Modelled PM2.5",
@@ -1832,11 +1831,11 @@ p <- ggplot(perm, aes(x = factors, y = rsq)) +
       "school_ses" = "School mean SES",
       "natural_elements_score" = "Natural elements score",
       "school_context" = "Non-green schoolyard",
-      "landscape_type" = "Landscape type"
+      "landscape_type" = "Landscape type (urban)"
     )
   ) +
   xlab("") +
-  ylab("Correlation with Inverse Simpson\n(including all environmental samples)") +
+  ylab("Log-scale effect of Inverse Simpson\n(including all environmental samples)") +
   #  ylim(values=c(0,0.02))+
   coord_flip() +
   theme(
@@ -1853,8 +1852,7 @@ p
 # alphas for environment: richness
 
 ```{r}
-# distribution?
-shapiro.test(data$mean_richness)
+data$mean_richness <- as.integer(data$mean_richness)
 ggplot(data, aes(mean_richness)) +
   geom_histogram()
 
@@ -1864,24 +1862,37 @@ ste <- c()
 factors <- c("sirm", "school_ses", "landscape_type", "school_context", "natural_elements_score", "sample_type") # "no2" , "pm10", "pm25", "bc",
 
 mod <- glmmTMB(
-  mean_richness ~ sirm + (1 | landscape_type) + (1 | sample_type) + (1 | total_count) + (1 | school_id), family = poisson, data = data)
+  mean_richness ~ sirm
+  + offset(log(total_count))
+  + (1 | school_id),
+  family = poisson, data = data)
 rsq <- append(rsq, coef(summary(mod))$cond[2, 1])
 pv <- append(pv, coef(summary(mod))$cond[2, 4])
 ste <- append(ste, coef(summary(mod))$cond[2, 2])
 
-mod <- glmmTMB(mean_richness ~ school_ses + (1 | landscape_type) + (1 | sample_type) + (1 | total_count) + (1 | school_id), family = poisson, data = data)
+mod <- glmmTMB(
+  mean_richness ~
+    school_ses 
+  + offset(log(total_count))
+  + (1 | school_id),
+  family = poisson, data = data)
 rsq <- append(rsq, coef(summary(mod))$cond[2, 1])
 pv <- append(pv, coef(summary(mod))$cond[2, 4])
 ste <- append(ste, coef(summary(mod))$cond[2, 2])
 
-mod <- glmmTMB(mean_richness ~ landscape_type + (1 | sample_type) + (1 | total_count) + (1 | school_id), family = poisson, data = data)
+mod <- glmmTMB(
+  mean_richness ~ landscape_type
+  + offset(log(total_count))
+  + (1 | school_id),
+ family = poisson, data = data)
 rsq <- append(rsq, coef(summary(mod))$cond[2, 1])
 pv <- append(pv, coef(summary(mod))$cond[2, 4])
 ste <- append(ste, coef(summary(mod))$cond[2, 2])
 
 mod <- glmmTMB(
   mean_richness ~ school_context 
-  + (1 | landscape_type) + (1 | sample_type) + (1 | total_count) + (1 | school_id),
+  + offset(log(total_count))
+  + (1 | school_id),
   family = poisson,
   data = data
 )
@@ -1890,12 +1901,19 @@ pv <- append(pv, coef(summary(mod))$cond[2, 4])
 ste <- append(ste, coef(summary(mod))$cond[2, 2])
 
 mod <- glmmTMB(
-  mean_richness ~ natural_elements_score + (1 | landscape_type) + (1 | sample_type) + (1 | total_count) + (1 | school_id), family = poisson, data = data)
+  mean_richness ~ natural_elements_score
+  + offset(log(total_count))
+  + (1 | school_id),
+  family = poisson, data = data)
 rsq <- append(rsq, coef(summary(mod))$cond[2, 1])
 pv <- append(pv, coef(summary(mod))$cond[2, 4])
 ste <- append(ste, coef(summary(mod))$cond[2, 2])
 
-mod <- glmmTMB(mean_richness ~ sample_type + (1 | landscape_type) + (1 | total_count) + (1 | school_id), family = poisson, data = data)
+mod <- glmmTMB(
+  mean_richness ~ sample_type
+  + offset(log(total_count))
+  + (1 | school_id),
+ family = poisson, data = data)
 rsq <- append(rsq, coef(summary(mod))$cond[2, 1])
 pv <- append(pv, coef(summary(mod))$cond[2, 4])
 ste <- append(ste, coef(summary(mod))$cond[2, 2])
@@ -1926,7 +1944,7 @@ p <- ggplot(perm, aes(x = factors, y = rsq)) +
   #  scale_y_continuous(trans="log10") +
   scale_x_discrete(
     labels = c(
-      "sample_type" = "Sample type",
+      "sample_type" = "Sample type (plant)",
       "no2" = "Modelled NO2",
       "pm10" = "Modelled PM10",
       "pm25" = "Modelled PM2.5",
@@ -1939,7 +1957,7 @@ p <- ggplot(perm, aes(x = factors, y = rsq)) +
     )
   ) +
   xlab("") +
-  ylab("Correlation with ASV richness\n(including all environmental samples)") +
+  ylab("Log-scale effect of ASV richness\n(including all environmental samples)") +
   #  ylim(values=c(0,0.02))+
   coord_flip() +
   theme(
