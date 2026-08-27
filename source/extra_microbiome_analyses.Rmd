@@ -1835,7 +1835,7 @@ p <- ggplot(perm, aes(x = factors, y = rsq)) +
     )
   ) +
   xlab("") +
-  ylab("Log-scale effect of Inverse Simpson\n(including all environmental samples)") +
+  ylab("Log-scale effect on Inverse Simpson\n(including all environmental samples)") +
   #  ylim(values=c(0,0.02))+
   coord_flip() +
   theme(
@@ -1957,7 +1957,7 @@ p <- ggplot(perm, aes(x = factors, y = rsq)) +
     )
   ) +
   xlab("") +
-  ylab("Log-scale effect of ASV richness\n(including all environmental samples)") +
+  ylab("Log-scale effect on ASV richness\n(including all environmental samples)") +
   #  ylim(values=c(0,0.02))+
   coord_flip() +
   theme(
