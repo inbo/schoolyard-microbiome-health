@@ -43,4 +43,4 @@ identifiers:
   value: 10.5281/zenodo.21296003
 - type: url
   value: https://www.uantwerpen.be/nl/projecten/baseball/
-version: 0.3.0
+version: 0.3.1
