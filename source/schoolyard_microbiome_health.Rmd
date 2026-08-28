@@ -4557,6 +4557,31 @@ saveRDS(
 )
 ```
 
+## Sample sizes for each model
+
+```{r}
+n_children_ks <- nrow(mv_adj_mi_ks$data)
+n_children_isaac <- nrow(mv_adj_mi_isaac_ses_skin$data)
+n_children_nisaac <- nrow(mv_adj_mi_nisaac$data)
+all.equal(n_children_isaac, n_children_nisaac)
+
+n_children_skin <- nrow(mv_adj_mi_skin$data)
+
+list(
+  "kidscreen" = n_children_ks,
+  "isaac" = n_children_isaac,
+  "skin" = n_children_skin
+) |>
+  as.data.frame() |> 
+  kable()
+```
+
+The KIDSCREEN-27 model included `r n_children_ks` children.
+Both models based on ISAAC data included `r n_children_isaac` children.
+The model for skin microbial diversity included `r n_children_skin` children.
+
+The sample size reported here exclude the children for which we did not have consent for long-term archiving of data.
+
 # Session info
 
 <details>
