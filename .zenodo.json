@@ -1,10 +1,10 @@
 {
-  "version": "0.2.0",
-  "license": "cc-by-4.0",
+  "version": "0.3.0",
+  "license": "CC BY 4.0",
   "access_right": "open",
   "language": "eng",
   "title": "Repository for Environmental bacteria link green schoolyards to better child well-being and fewer allergy symptoms.",
-  "description": "<p>Code and supplementary data for the paper: Smets et al. (2026). Environmental bacteria link green schoolyards to better child well-being and fewer allergy symptoms. in review at Nature Communications.<\/p>",
+  "description": "<p>This repository contains code and supplementary data to reproduce the analyses from the paper: Smets et al. (2026). Environmental bacteria link green schoolyards to better child well-being and fewer allergy symptoms. in review at Nature Communications.<\/p>",
   "keywords": [
     "environmental health",
     "allergy",
@@ -23,11 +23,11 @@
       "name": "Van Calster, Hans",
       "affiliation": "Research Institute for Nature and Forest (INBO)",
       "orcid": "0000-0001-8595-8426",
-      "type": "ContactPerson"
+      "type": "contactperson"
     },
     {
       "name": "Research Institute for Nature and Forest (INBO)",
-      "type": "RightsHolder"
+      "type": "rightsholder"
     }
   ],
   "creators": [

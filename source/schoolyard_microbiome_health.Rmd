@@ -458,7 +458,8 @@ health_outcomes <- health_data |>
   )
 
 health_outcomes |>
-  naniar::vis_miss()
+  naniar::vis_miss() +
+  theme(axis.text.x = element_text(vjust = 0))
 ```
 
 We calculate Spearman rank correlations between outcomes and visualise them in Figure \@ref(fig:corrplot).
@@ -516,7 +517,8 @@ health_data |>
     all_of(all.vars(covars))) %>%
   mutate(all_combined = ifelse(complete.cases(.), 1, NA)) |>
   naniar::vis_miss(cluster = TRUE, sort_miss = TRUE) +
-  expand_limits(x = 22)
+  expand_limits(x = 22) +
+  theme(axis.text.x = element_text(vjust = 0))
 ```
 
 ### Collinearity
@@ -2445,7 +2447,7 @@ pe |>
     aes(
       x = ses_mean,
       y = oddsratio),
-    alpha = 0.4
+    alpha = 0.9
   ) +
   geom_hline(yintercept = 1) +
   scale_y_continuous(
@@ -4554,6 +4556,31 @@ saveRDS(
   file.path(data_objects_folder, "p_skindiv_totalreads.rds")
 )
 ```
+
+## Sample sizes for each model
+
+```{r}
+n_children_ks <- nrow(mv_adj_mi_ks$data)
+n_children_isaac <- nrow(mv_adj_mi_isaac_ses_skin$data)
+n_children_nisaac <- nrow(mv_adj_mi_nisaac$data)
+all.equal(n_children_isaac, n_children_nisaac)
+
+n_children_skin <- nrow(mv_adj_mi_skin$data)
+
+list(
+  "kidscreen" = n_children_ks,
+  "isaac" = n_children_isaac,
+  "skin" = n_children_skin
+) |>
+  as.data.frame() |> 
+  kable()
+```
+
+The KIDSCREEN-27 model included `r n_children_ks` children.
+Both models based on ISAAC data included `r n_children_isaac` children.
+The model for skin microbial diversity included `r n_children_skin` children.
+
+The sample size reported here exclude the children for which we did not have consent for long-term archiving of data.
 
 # Session info
 

@@ -31,14 +31,16 @@ contact:
   family-names: Van Calster
   affiliation: Research Institute for Nature and Forest (INBO)
   orcid: 0000-0001-8595-8426
-doi: ~
+doi: 10.5281/zenodo.21296003
 license: CC BY 4.0
 repository-code: https://github.com/inbo/schoolyard-microbiome-health/
 type: software
-abstract: "Code and supplementary data for the paper: Smets et al. (2026). Environmental
-  bacteria link green schoolyards to better child well-being and fewer allergy symptoms.
-  in review at Nature Communications."
+abstract: "This repository contains code and supplementary data to reproduce the analyses
+  from the paper: Smets et al. (2026). Environmental bacteria link green schoolyards
+  to better child well-being and fewer allergy symptoms. in review at Nature Communications."
 identifiers:
+- type: doi
+  value: 10.5281/zenodo.21296003
 - type: url
   value: https://www.uantwerpen.be/nl/projecten/baseball/
-version: 0.2.0
+version: 0.3.0

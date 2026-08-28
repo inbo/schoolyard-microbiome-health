@@ -1,3 +1,6 @@
 *
 !.gitignore
-!/*.csv
+!micdata/
+!micdata/**/
+!micdata/*.csv
+!micdata/**/*.csv

@@ -1,0 +1,2114 @@
+---
+title: "Additional microbiome analyses for _Environmental bacteria link green schoolyards to better child well-being and fewer allergy symptoms_"
+author: "Wenke Smets, Hans Van Calster"
+date: "`r Sys.Date()`"
+output:
+  bookdown::html_document2:
+    toc: true
+    toc_float: true
+    code_folding: hide
+editor_options: 
+  markdown: 
+    wrap: sentence
+  chunk_output_type: console
+---
+
+
+```{r setup, include=FALSE}
+library(knitr)
+library(here)
+opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.width = 8,
+  fig.height = 6
+)
+opts_knit$set(root.dir = here())
+library(frictionless)
+library(tidytacos)
+library(radEmu)
+library(glmmTMB)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(stringr)
+library(forcats)
+library(lme4)
+
+conflicted::conflicts_prefer(dplyr::select)
+conflicted::conflicts_prefer(dplyr::filter)
+
+"%!in%" <- function(x, y) !("%in%"(x, y))
+
+# Copied from tidytacos:::tidy_count_to_matrix (internal, not exported)
+# tidytacos version: 1.0.9
+tidy_count_to_matrix <- function(counts, value = count) {
+  if (!is.data.frame(counts) || is.null(counts$taxon_id) || is.null(counts$sample_id)) {
+    stop("first argument should be a counts table (data frame)")
+  }
+  value <- rlang::enquo(value)
+  counts_wide <- counts %>%
+    dplyr::select(sample_id, taxon_id, !!value) %>%
+    tidyr::spread(key = taxon_id, value = !!value, fill = 0)
+  counts_wide %>%
+    dplyr::select(-sample_id) %>%
+    as.matrix() %>%
+    `row.names<-`(counts_wide$sample_id)
+}
+```
+
+```{r cache=TRUE, results='hide'}
+1 + 1
+# just a trick to prevent the folder containing figures from being removed
+# when knitting a self-contained document
+```
+
+```{css, echo=FALSE}
+img {
+  max-width:150%;
+  height: auto;
+}
+
+.warning {
+  background-color: #fcf8e3;
+  color: #8a6d3b;
+  padding: 15px;
+  border-left: 5px solid #faebcc;
+  border-radius: 4px;
+  margin-bottom: 15px;
+}
+```
+
+::: warning
+**Warning:** This document contains the analysis pipeline that was used for the paper *Environmental bacteria link green schoolyards to better child well-being and fewer allergy symptoms*.
+While the code is identical, the data used in this document (513 participants) is a (large) subset of the data used in the paper (529 participants).
+The reason for this is that some participants / parents did not give consent for long-term storage / archiving of their data.
+As such, we had permission to use their data in publications, but not to publish their data in a long-term public archive.
+The data used in this repository, which are downloaded from <https://doi.org/10.5281/zenodo.10527033> (see `source/reproduce.R`) [@vancalster2024], therefore only include data from participants / parents that gave consent for long-term storage of their data.
+As a consequence, the results from the paper are not exactly reproducible.
+:::
+
+# Read resources
+
+```{r read-package}
+cleaned_data <- read_package(
+  here::here(
+    "data",
+    "datapackage_an_zenodo_cleaned_data",
+    "datapackage.json"
+  )
+)
+
+derived_data <- read_package(
+  here::here(
+    "data",
+    "datapackage_an_zenodo_derived_data",
+    "datapackage.json"
+  )
+)
+```
+
+```{r which-resources}
+resource_names(cleaned_data)
+resource_names(derived_data)
+```
+
+
+# Join landscape naturalness and greenness information to microbiome sample data
+
+```{r}
+landscape_data <- read_resource(
+  package = cleaned_data,
+  resource_name = "wp1_landscape_level_data"
+)
+
+# glimpse(landscape_data)
+
+school_data <- read_resource(
+  package = derived_data,
+  resource_name = "wp1_school_level_key_variables"
+)
+
+plgr_biodiv <- read_resource(
+  package = cleaned_data,
+  resource_name = "wp3_ucl_playground_biodiversity"
+)
+
+greenness <- read_resource(
+  cleaned_data,
+  "wp3_ucl_greenness_indicators"
+)
+
+plgr_areas <- greenness %>%
+  filter(
+    indicator == "greenness2",
+    buffer_size == 0,
+    area_considered == "playground limit"
+  ) %>%
+  select(code_area, playground_area = buffer_area)
+
+plgr_biodiv_2 <- plgr_biodiv %>%
+  group_by(school_id) %>%
+  arrange(school_id) %>%
+  mutate(
+    frequency_of_use = if_else(
+      n() == 1 & is.na(frequency_of_use),
+      "Daily",
+      frequency_of_use
+    ),
+    weight_freq = recode_values(
+      frequency_of_use,
+      "Daily" ~ 1,
+      "Weekly" ~ 1 / 5,
+      "Monthly" ~ 1 / 20
+    ),
+    weight_freq = weight_freq / sum(weight_freq, na.rm = TRUE)
+  ) %>%
+  inner_join(plgr_areas, by = join_by(code_playground == code_area)) %>%
+  mutate(
+    weight_area = playground_area / sum(playground_area, na.rm = TRUE),
+    weight = weight_area * weight_freq /
+      sum(weight_area * weight_freq, na.rm = TRUE)
+  )
+
+school_biodiv_derived <- plgr_biodiv_2 %>%
+  ungroup() %>%
+  mutate(
+    tree_number_rescaled =
+      (a_tree_number - min(a_tree_number, na.rm = TRUE)) /
+        (max(a_tree_number, na.rm = TRUE) - min(a_tree_number, na.rm = TRUE))
+  ) %>%
+  group_by(school_id) %>%
+  summarise(
+    water_feature = sum(weight * water_feature),
+    vegetation = sum(weight * vegetation),
+    sand = sum(weight * sand),
+    woodchips = sum(weight * woodchips),
+    gravels = sum(weight * gravels),
+    b_edge_shrub = sum(weight * b_edge_shrub),
+    c_grass = sum(weight * c_grass),
+    d_flowerbed = sum(weight * d_flowerbed),
+    e_weeds = sum(weight * e_weeds),
+    f_flowerbox_gardenbox = sum(weight * f_flowerbox_gardenbox),
+    g_garden = sum(weight * g_garden),
+    h_treestump = sum(weight * h_treestump),
+    i_greenwall = sum(weight * i_greenwall),
+    j_branches = sum(weight * j_branches),
+    k_greenroof = sum(weight * k_greenroof),
+    tree_number_rescaled = sum(weight * tree_number_rescaled^(1 / 5))
+  )
+
+
+# glimpse(envi_mb_data)
+
+envdat <- landscape_data %>%
+  select(school_id, landscape_type, no2, bc, pm10 = pm10_min_pm25) %>%
+  left_join(school_biodiv_derived) %>%
+  left_join(
+    school_data %>%
+      mutate(playgreen = playground__area_green / playground__area) %>%
+      mutate(extragreen = extra_school__area_green / extra_school__area) %>%
+      mutate(outgreen100 = extra_100m__area_green / extra_100m__area) %>%
+      mutate(outgreen300 = extra_300m__area_green / extra_300m__area) %>%
+      select(
+        school_id, community, school_context, allergenic_potential, playgreen,
+        extragreen, outgreen100, outgreen300, sirm = mean_sirm_logratio, pm25,
+        school_ses = ses, natural_elements_score, tree_number, province_name,
+        case_control_id
+      )
+  )
+
+rm(landscape_data, school_data, plgr_areas, plgr_biodiv,
+   plgr_biodiv_2, school_biodiv_derived, greenness)
+```
+
+
+# Create environmental `tidtytacos` object
+
+Let's make a new `tidytacos` object from the samples, taxa and counts tables for the environmental microbiomes that includes the naturalness of the landscape.
+
+```{r}
+envir_microbiome <- read_tidytacos(here("data", "micdata", "environ"))
+
+envir_microbiome$samples <- envir_microbiome$samples |>
+  left_join(envdat)
+
+str(envir_microbiome, 1)
+```
+
+
+# Preprocess environmental microbiome data
+
+```{r}
+unique(envir_microbiome$samples$sample_type)
+envir_microbiome$samples <- envir_microbiome$samples %>%
+  mutate(
+    sample_type = ifelse(
+      sample_type %in% c("sanddirtdust", "dirt/dust"),
+      "dirt",
+      sample_type)
+  )
+```
+
+
+# Join participant information to skin microbiome sample data
+
+First joining several child characteristics with microbiome data.
+Some doubles occur in the questionnaires: mean of numeric responses per child.
+
+```{r}
+child_data1 <- read_resource(
+  package = derived_data,
+  resource_name = "wp1_child_level_key_variables"
+)
+child_data2 <- read_resource(
+  package = cleaned_data,
+  resource_name = "wp5_parents_outdoor_play_data_part2"
+)
+
+child_data2 <- child_data2 %>%
+  filter(
+    question_code %in%
+      c("x5_5", "x5_7", "x5_8", "x5_9", "x5_11", "x5_12", "x5_13", "x5_14",
+        "x5_15", "x5_17", "x5_18")
+  ) %>%
+  mutate(response = ifelse(
+    response == "no association - association",
+    0.5,
+    ifelse(
+      response == "association",
+      1,
+      ifelse(response == "no association", 0, NA)
+      )
+    )
+  ) %>%
+  group_by(child_id, question_code) %>%
+  summarise(response = mean(response)) %>%
+  ungroup() %>%
+  group_by(child_id) %>%
+  summarise(nature_exposure = sum(response) / 11)
+
+child_data3 <- read_resource(
+  package = cleaned_data,
+  resource_name = "wp5_parents_outdoor_play_data_part3"
+)
+
+child_data3 <- child_data3 %>%
+  filter(question_code %in% c("x5_20", "x5_21", "x5_22", "x5_23")) %>%
+  mutate(response = ifelse(response == "< 1", 0.5, ifelse(
+    response == "1-2", 1.5, ifelse(response == "2-3", 2.5, ifelse(
+      response == "3-4", 3.5, ifelse(
+        response == "< 1 - 1-2",
+        1,
+        ifelse(response == "1-2 - 3-4", 2.5, ifelse(
+          response == "0", 0, ifelse(response == "> 4", 5, ifelse(
+            response == "1-2 - 2-3", 2, ifelse(response == "3-4 - > 4", 4, ifelse(
+              response == "0 - < 1", 0.5, ifelse(response == "2-3 - 3-4", 3, NA)
+            ))
+          ))
+        ))
+      )
+    ))
+  ))) %>%
+  group_by(child_id, question_code) %>%
+  summarize(response = mean(response)) %>%
+  pivot_wider(names_from = question_code, values_from = response) %>%
+  mutate(sitsindoors = ((x5_20 + x5_22) * 5 + (x5_21 + x5_23) * 2) / 7) %>%
+  select(child_id, sitsindoors)
+
+
+child_data4 <- read_resource(
+  package = cleaned_data,
+  resource_name = "wp5_parents_living_environment_data"
+)
+
+garden_data_recoded <- child_data4 %>%
+  filter(
+    question_short %in%
+      c("garden_present", "garden_type", "garden_usage", "garden_size")
+  ) %>%
+  mutate(response_recoded = case_when(
+    question_short == "garden_present" & response_values == "1" ~ 0,
+    question_short == "garden_present" & response_values != "1" ~ 1,
+    question_short == "garden_size" & response_values == "1" ~ 0,
+    question_short == "garden_size" & response_values == "2" ~ 1,
+    question_short == "garden_size" & response_values == "2 - 3" ~ 1.5,
+    question_short == "garden_size" & response_values == "3" ~ 2,
+    question_short == "garden_size" & response_values == "4" ~ 3,
+    question_short == "garden_type" & response_values == "1" ~ 0,
+    question_short == "garden_type" & response_values == "1 - 3" ~ 1,
+    question_short == "garden_type" & response_values == "2" ~ 1,
+    question_short == "garden_type" & response_values == "3" ~ 2,
+    question_short == "garden_type" & response_values == "4" ~ 1.5,
+    question_short == "garden_usage" ~ as.numeric(response_values) - 1
+  ))
+
+garden_data <- garden_data_recoded %>%
+  pivot_wider(
+    id_cols = c(child_id, replicate_id, case),
+    names_from = question_short,
+    values_from = response_recoded,
+    values_fill = list(response_recoded = 0)
+  ) %>%
+  mutate(
+    garden_score = (garden_size / 3 + garden_type / 2 + garden_usage / 3) / 3
+  ) %>%
+  select(child_id, garden_present, garden_score)
+
+kiddat <- child_data1 %>%
+  left_join(child_data2) %>%
+  left_join(child_data3) %>%
+  left_join(garden_data)
+
+kiddat_num <- unique(kiddat) %>%
+  group_by(child_id) %>%
+  summarise(across(where(is.numeric), mean))
+kiddat_chr <- kiddat %>%
+  select(child_id, school_id, class_id, biological_sex, family_situation,
+         origin_simplified) %>%
+  unique()
+kiddat <- left_join(kiddat_num, kiddat_chr)
+
+rm(child_data1, child_data2, child_data3, garden_data, garden_data_recoded,
+   child_data4, kiddat_num, kiddat_chr)
+```
+
+
+# Create skin `tidytacos` object
+
+```{r skin-microbiome}
+skin_microbiome <- read_tidytacos(here("data", "micdata", "skin"))
+
+skin_microbiome$samples <- skin_microbiome$samples %>%
+  left_join(kiddat, by = join_by(school_id, class_id, child_id))
+
+str(skin_microbiome, 1)
+```
+
+# Data prep
+
+```{r}
+# Data per child:
+cdata <- kiddat %>%
+  select(
+    school_id, child_id, biological_sex, nature_exposure, nature_connectedness,
+    sitsindoors, ses, family_situation, origin_simplified, t_score_sch,
+    t_score_par, t_score_soc, t_score_phy, t_score_pwb, eczema, rhinitis,
+    wheezing
+  )
+
+# Data per school:
+sdata <- envdat %>%
+  select(
+    school_id, school_context, allergenic_potential, playgreen, extragreen,
+    outgreen100, outgreen300, landscape_type, no2, bc, pm10, sirm, pm25,
+    school_ses, community, tree_number, natural_elements_score
+  )
+
+# Merge child and school data
+kiddatnew <- left_join(cdata, sdata, by = join_by(school_id))
+
+# Skin microbiome plus metadata
+runs <- skin_microbiome
+runs$samples <- runs$samples %>%
+  left_join(sdata)
+```
+
+
+# Cleaning and setting up microbiome data
+
+```{r}
+# remove low-read samples§
+rune <- envir_microbiome %>%
+  filter_samples(lib_size > 350) %>%
+  mutate_samples(sample = paste(school_id, sample_type, lib_size)) %>%
+  mutate_samples(scale_mean_log_sirm = as.numeric(scale(sirm)))
+runs <- runs %>%
+  filter_samples(lib_size > 600) %>%
+  mutate_samples(sample = child_id) %>%
+  mutate_samples(scale_mean_log_sirm = as.numeric(scale(sirm))) %>%
+  add_total_count()
+
+# adding div of most abundant skin classes
+
+scl <- runs %>%
+  aggregate_taxa(rank = "class") %>%
+  add_mean_rel_abundance() %>%
+  taxa() %>%
+  arrange(desc(mean_rel_abundance)) %>%
+  select(class)
+classes <- scl$class[1:11][!is.na(scl$class[1:11])] # removing class NA, keeping ten most abundant classes
+
+set.seed(2487)
+r <- runs %>%
+  add_mean_rel_abundance() %>%
+  select_samples(-inverse_simpson) %>%
+  add_alphas(method = c("obs", "invsimpson"))
+sdiv <- r$samples %>%
+  select(child_id, school_id, skin_richness = obs, skin_simpson = invsimpson)
+runs$samples <- left_join(runs$samples, sdiv)
+
+namesrich <- c()
+namessimp <- c()
+
+for (c in classes) {
+  r <- runs %>%
+    filter_taxa(class == c) %>%
+    add_alphas(method = c("obs", "invsimpson"))
+  sdivs <- r$samples %>%
+    select(child_id, obs, invsimpson) %>%
+    dplyr::rename(!!sym(paste(str_sub(c, 1, 5), "richness", sep = "_")) := obs, !!sym(paste(str_sub(c, 1, 5), "simpson", sep = "_")) := invsimpson)
+  runs$samples <- left_join(runs$samples, sdivs)
+  namesrich <- append(namesrich, paste(str_sub(c, 1, 5), "richness", sep = "_"))
+  namessimp <- append(namessimp, paste(str_sub(c, 1, 5), "simpson", sep = "_"))
+}
+classdiv <- tibble(classes, namesrich, namessimp)
+runs$samples <- runs$samples %>%
+  left_join(unique(select(rune$samples, school_id)))
+
+tacosum(rune)
+runeg <- aggregate_taxa(rune, rank = "genus") %>%
+  add_mean_rel_abundance()
+tacosum(runeg)
+tacosum(runs)
+runsg <- aggregate_taxa(runs, rank = "genus") %>%
+  add_mean_rel_abundance()
+tacosum(runsg)
+
+rm(r, sdivs, sdiv, scl)
+```
+
+
+# Allergy data reformatting
+
+```{r}
+runs <- runs %>%
+  mutate_samples(sample = child_id) %>%
+  mutate_samples(Eczema = ifelse(eczema < 0, 0, 1)) %>%
+  mutate_samples(Wheezing = ifelse(wheezing < 0, 0, 1)) %>%
+  mutate_samples(Rhinitis = ifelse(rhinitis < 0, 0, 1)) %>%
+  mutate_samples(allergy_symptoms = Eczema + Wheezing + Rhinitis)
+
+
+# allergies per school, with omission of schools with only 1 or 2 pupils
+
+allergies <- runs$samples %>%
+  drop_na(allergy_symptoms) %>%
+  group_by(school_id) %>%
+  summarise(
+    meaneczema = mean(Eczema),
+    meanwheezing = mean(Wheezing),
+    meanrhinitis = mean(Rhinitis),
+    allergy_symptoms = mean(allergy_symptoms),
+    ne = sum(!is.na(Eczema))) %>%
+  mutate(meaneczema = ifelse(ne < 3, NA, meaneczema)) %>%
+  drop_na(meaneczema) %>%
+  select(-ne)
+
+rune$samples <- left_join(rune$samples, allergies)
+data <- runs$samples
+
+
+# means of allergic symptoms
+
+dat <- data %>%
+  select(Eczema, nature_exposure) %>%
+  drop_na(Eczema)
+sum(dat$Eczema) / nrow(dat)
+dat <- data %>%
+  select(Wheezing, nature_exposure) %>%
+  drop_na(Wheezing)
+sum(dat$Wheezing) / nrow(dat)
+dat <- data %>%
+  select(Rhinitis, nature_exposure) %>%
+  drop_na(Rhinitis)
+sum(dat$Rhinitis) / nrow(dat)
+```
+
+
+# Allergy-specific bacteria in plants (radEmu)
+
+Unify ASV names across environmental and skin taxa:
+
+```{r}
+taxn <- runs %>%
+  mutate_samples(sample_type = "skin") %>%
+  merge_tidytacos(rune, taxon_identifier = taxon) %>%
+  select_taxa(-species) %>%
+  add_taxon_name() %>%
+  add_prevalence() %>%
+  filter_taxa(prevalence > 2)
+taxn <- taxn$taxa %>%
+  select(taxon_name, taxon)
+```
+
+Are 100 most prevalent plant taxa related to any of the allergies?
+(this code could take a while to run!)
+
+```{r rademu-plant-samples}
+# pooling 3 plant samples per school
+y1 <- rune %>%
+  filter_samples(sample_type == "plant") %>%
+  select_samples(
+    school_id, sample_id, meaneczema, meanrhinitis, meanwheezing,
+    allergy_symptoms, natural_elements_score, school_context, landscape_type) %>%
+  aggregate_samples() %>%
+  add_prevalence()
+
+ggplot(y1$taxa, aes(x = prevalence)) +
+  geom_histogram(binwidth = 1) +
+  xlim(c(2, 30)) +
+  # ylim(c(1,500))+
+  # scale_y_log10()+
+  labs(x = "Prevalence in plant samples", y = "ASV count") +
+  geom_vline(xintercept = 7.5, col = "blue")
+
+y1$samples <- drop_na(y1$samples, allergy_symptoms)
+y1$counts <- filter(y1$counts, sample_id %in% y1$samples$sample_id)
+
+# setting up to select only the 100 most prevalent ASVs
+y1$taxa <- y1$taxa %>%
+  arrange(desc(prevalence)) %>%
+  left_join(taxn) %>%
+  mutate(keep = F) %>%
+  {
+    .$keep[1:100] <- T
+    .
+  }
+
+y1 <- y1 %>%
+  mutate_taxa(name = ifelse(keep == FALSE, "other", taxon_name)) %>%
+  select_taxa(taxon_id, name) %>%
+  aggregate_taxa() %>%
+  add_prevalence(relative = F)
+
+mostprevplant <- y1$taxa %>%
+  left_join(rune$taxa) %>%
+  select(name, family, class, phylum, prevalence)
+#write.csv(mostprevplant, "mostprevplant.csv", quote = F, row.names = F)
+
+ggplot(y1$taxa, aes(x = prevalence)) +
+  geom_histogram()
+
+samp <- select(
+  y1$samples,
+  sample_id,
+  meaneczema,
+  meanrhinitis,
+  meanwheezing,
+  allergy_symptoms,
+  school_id
+)
+rownames(samp) <- samp$sample_id
+y <- tidy_count_to_matrix(y1$counts)[samp$sample_id, ]
+
+# differential abundance analysis with radEmu
+# increase tolerance for more reliable pvalues, at the cost of longer runtime
+#radEmu::make_design_matrix(formula = ~ meaneczema, data = samp, Y = y)
+xfun::cache_exec(
+  {
+    fit1 <- radEmu::emuFit(
+      formula = ~ meaneczema, data = samp, Y = y,
+      test_kj = data.frame(k = "meaneczema", j = seq_len(ncol(y))),
+      tolerance = 1e-2
+    )
+    fit2 <- radEmu::emuFit(
+      formula = ~ meanrhinitis, data = samp, Y = y,
+      test_kj = data.frame(k = "meanrhinitis", j = seq_len(ncol(y))),
+      tolerance = 1e-2
+    )
+    fit3 <- radEmu::emuFit(
+      formula = ~ meanwheezing, data = samp, Y = y,
+      test_kj = data.frame(k = "meanwheezing", j = seq_len(ncol(y))),
+      tolerance = 1e-2
+    )
+    fit4 <- radEmu::emuFit(
+      formula = ~ allergy_symptoms, data = samp, Y = y,
+      test_kj = data.frame(k = "allergy_symptoms", j = seq_len(ncol(y))),
+      tolerance = 1e-2
+    )
+  },
+  path = "source/extra_microbiome_analyses_cache/"
+)
+
+ecz <- fit1$coef %>%
+  filter(covariate == "meaneczema") %>%
+  mutate(taxon_id = category) %>%
+  left_join(y1$taxa) %>%
+  select(covariate, name, estimate, pval)
+ecz
+
+rhi <- fit2$coef %>%
+  filter(covariate == "meanrhinitis") %>%
+  mutate(taxon_id = category) %>%
+  left_join(y1$taxa) %>%
+  select(covariate, name, estimate, pval)
+rhi
+
+whe <- fit3$coef %>%
+  filter(covariate == "meanwheezing") %>%
+  mutate(taxon_id = category) %>%
+  left_join(y1$taxa) %>%
+  select(covariate, name, estimate, pval)
+whe
+
+sym <- fit4$coef %>%
+  filter(covariate == "allergy_symptoms") %>%
+  mutate(taxon_id = category) %>%
+  left_join(y1$taxa) %>%
+  select(covariate, name, estimate, pval)
+sym
+
+planttaxa <- rbind(ecz, rhi, whe, sym)
+
+sigtax <- planttaxa %>%
+  filter(
+    pval < 0.05 & covariate %in%
+      c("meaneczema", "meanrhinitis", "meanwheezing", "allergy_symptoms")
+  )
+planttaxa <- planttaxa %>%
+  filter(name %in% sigtax$name) %>%
+  mutate(significance = ifelse(pval < 0.05, "*", "")) %>%
+  mutate(
+    covariate = fct_recode(
+      covariate,
+      "Eczema symptoms" = "meaneczema",
+      "Rhinitis symptoms" = "meanrhinitis",
+      "Wheezing & asthma symptoms" = "meanwheezing",
+      "Allergy categories count" = "allergy_symptoms",
+      "Urban landscape" = "landscape_typelow naturalness",
+      "Grey schoolground" = "school_contextlow greenness",
+      "Natural elements score" = "natural_elements_score"
+    )
+  ) %>%
+  mutate(
+    covariate = fct_relevel(
+      covariate,
+      "Urban landscape",
+      "Grey schoolground",
+      "Natural elements score",
+      "Eczema symptoms",
+      "Rhinitis symptoms",
+      "Wheezing & asthma symptoms",
+      "Allergy categories count"
+    )
+  )
+
+# Figures
+
+ggplot(planttaxa, aes(y = covariate, x = name, fill = estimate)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "darkgreen", mid = "white", high = "darkorange") +
+  geom_text(aes(label = significance), color = "black", size = 5) +
+  xlab("Plant ASVs") +
+  ylab("") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = -45, hjust = 0))
+
+
+fplanttaxa <- planttaxa %>%
+  filter(
+    covariate %in% c(
+      "Eczema symptoms",
+      "Rhinitis symptoms",
+      "Wheezing & asthma symptoms",
+      "Allergy categories count"
+    )
+  )
+ggplot(fplanttaxa, aes(y = covariate, x = name, fill = estimate)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "darkgreen", mid = "white", high = "darkorange") +
+  geom_text(aes(label = significance), color = "black", size = 5) +
+  xlab("Plant ASVs") +
+  ylab("") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = -45, hjust = 0))
+```
+
+
+# Allergy-specific bacteria in sand dirt dust (radEmu)
+
+(Figure in supplementary materials)
+
+```{r rademu-sanddirtdust-samples}
+y1 <- rune %>%
+  filter_samples(sample_type %in% c("sand", "dirt", "dust")) %>%
+  select_samples(
+    school_id, sample_id, sample_type, meaneczema, meanrhinitis,
+    meanwheezing, allergy_symptoms, natural_elements_score, school_context,
+    landscape_type
+  ) %>%
+  aggregate_samples() %>%
+  add_prevalence()
+
+y1$samples <- drop_na(y1$samples, allergy_symptoms)
+y1$counts <- filter(y1$counts, sample_id %in% y1$samples$sample_id)
+
+y1$taxa <- y1$taxa %>%
+  arrange(desc(prevalence)) %>%
+  left_join(taxn) %>%
+  mutate(keep = FALSE) %>%
+  {
+    .$keep[1:100] <- TRUE
+    .
+  }
+
+y1 <- y1 %>%
+  mutate_taxa(name = ifelse(keep == FALSE, "other", taxon_name)) %>%
+  select_taxa(taxon_id, name) %>%
+  aggregate_taxa()
+samp <- select(
+  y1$samples, sample_id, sample_type, meaneczema, meanrhinitis, meanwheezing,
+  allergy_symptoms, school_id
+)
+rownames(samp) <- samp$sample_id
+y <- tidy_count_to_matrix(y1$counts)[samp$sample_id, ]
+design <- radEmu::make_design_matrix(formula = ~ sample_type + meaneczema, data = samp)
+colnames(design)
+
+xfun::cache_exec(
+  {
+    fit1 <- radEmu::emuFit(
+      formula = ~ sample_type + meaneczema,
+      data = samp,
+      Y = y,
+      cluster = samp$school_id,
+      test_kj = data.frame(j = c(1:101), k = 4)
+    )
+    fit2 <- radEmu::emuFit(
+      formula = ~ sample_type + meanrhinitis,
+      data = samp,
+      Y = y,
+      cluster = samp$school_id,
+      test_kj = data.frame(j = c(1:101), k = 4)
+    )
+    fit3 <- radEmu::emuFit(
+      formula = ~ sample_type + meanwheezing,
+      data = samp,
+      Y = y,
+      cluster = samp$school_id,
+      test_kj = data.frame(j = c(1:101), k = 4)
+    )
+    fit4 <- radEmu::emuFit(
+      formula = ~ sample_type + allergy_symptoms,
+      data = samp,
+      Y = y,
+      cluster = samp$school_id,
+      test_kj = data.frame(j = c(1:101), k = 4)
+    )
+  },
+  path = "source/extra_microbiome_analyses_cache/"
+)
+ecz <- fit1$coef %>%
+  filter(covariate == "meaneczema") %>%
+  mutate(taxon_id = category) %>%
+  left_join(y1$taxa) %>%
+  select(covariate, name, estimate, pval)
+ecz
+
+rhi <- fit2$coef %>%
+  filter(covariate == "meanrhinitis") %>%
+  mutate(taxon_id = category) %>%
+  left_join(y1$taxa) %>%
+  select(covariate, name, estimate, pval)
+rhi
+
+whe <- fit3$coef %>%
+  filter(covariate == "meanwheezing") %>%
+  mutate(taxon_id = category) %>%
+  left_join(y1$taxa) %>%
+  select(covariate, name, estimate, pval)
+whe
+
+sym <- fit4$coef %>%
+  filter(covariate == "allergy_symptoms") %>%
+  mutate(taxon_id = category) %>%
+  left_join(y1$taxa) %>%
+  select(covariate, name, estimate, pval)
+sym
+
+soiltaxa <- rbind(ecz, rhi, whe, sym)
+
+sigtax <- soiltaxa %>%
+  filter(
+    pval < 0.05 & covariate %in%
+      c("meaneczema", "meanrhinitis", "meanwheezing", "allergy_symptoms")
+  )
+soiltaxa <- soiltaxa %>%
+  filter(name %in% sigtax$name) %>%
+  mutate(significance = ifelse(pval < 0.05, "*", "")) %>%
+  mutate(
+    covariate = fct_recode(
+      covariate,
+      "Eczema symptoms" = "meaneczema",
+      "Rhinitis symptoms" = "meanrhinitis",
+      "Wheezing & asthma symptoms" = "meanwheezing",
+      "Allergy categories count" = "allergy_symptoms",
+      "Urban landscape" = "landscape_typelow naturalness",
+      "Grey schoolground" = "school_contextlow greenness",
+      "Natural elements score" = "natural_elements_score"
+    )
+  ) %>%
+  mutate(
+    covariate = fct_relevel(
+      covariate,
+      "Urban landscape",
+      "Grey schoolground",
+      "Natural elements score",
+      "Eczema symptoms",
+      "Rhinitis symptoms",
+      "Wheezing & asthma symptoms",
+      "Allergy categories count"
+    )
+  )
+
+ggplot(soiltaxa, aes(y = covariate, x = name, fill = estimate)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "darkgreen", mid = "white", high = "darkorange") +
+  geom_text(aes(label = significance), color = "black", size = 5) +
+  xlab("Sand/soil ASVs") +
+  ylab("") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = -45, hjust = 0))
+
+fsoiltaxa <- soiltaxa %>%
+  filter(
+    covariate %in% c(
+      "Eczema symptoms",
+      "Rhinitis symptoms",
+      "Wheezing & asthma symptoms",
+      "Allergy categories count"
+    )
+  )
+ggplot(fsoiltaxa, aes(y = covariate, x = name, fill = estimate)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "darkgreen", mid = "white", high = "darkorange") +
+  geom_text(aes(label = significance), color = "black", size = 5) +
+  xlab("Sand/soil/dust ASVs") +
+  ylab("") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = -45, hjust = 0))
+```
+
+
+# Allergy-specific bacteria in skin (radEmu)
+
+(this code could take a while to run!)
+
+```{r rademu-skin-samples}
+y1 <- runs %>%
+  add_prevalence()
+
+ggplot(y1$taxa, aes(x = prevalence)) +
+  geom_histogram(binwidth = 1) +
+  xlim(c(20, 160)) +
+  # scale_y_log10()+
+  labs(x = "Prevalence in skin samples", y = "ASV count") +
+  geom_vline(xintercept = 96.5, col = "blue")
+
+y1$samples <- drop_na(y1$samples, allergy_symptoms)
+y1$counts <- filter(y1$counts, sample_id %in% y1$samples$sample_id)
+
+y1$taxa <- y1$taxa %>%
+  arrange(desc(prevalence)) %>%
+  left_join(taxn) %>%
+  mutate(keep = F) %>%
+  {
+    .$keep[1:200] <- T
+    .
+  }
+
+y1 <- y1 %>%
+  mutate_taxa(name = ifelse(keep == FALSE, "other", taxon_name)) %>%
+  select_taxa(taxon_id, name) %>%
+  aggregate_taxa() %>%
+  add_prevalence()
+
+mostprevskin <- y1$taxa %>%
+  left_join(rune$taxa) %>%
+  select(name, family, class, phylum, prevalence)
+#write.csv(mostprevskin, "mostprevskin.csv", quote = F, row.names = F) # for supplementary materials
+
+samp <- select(y1$samples,
+               sample_id,
+               Eczema,
+               Rhinitis,
+               Wheezing,
+               allergy_symptoms,
+               school_id)
+rownames(samp) <- samp$sample_id
+y <- tidy_count_to_matrix(y1$counts)[samp$sample_id, ]
+
+xfun::cache_exec(
+  {
+    fit1 <- radEmu::emuFit(
+      formula = ~ Eczema,
+      data = samp,
+      Y = y,
+      cluster = samp$school_id,
+      test_kj = data.frame(k = "Eczema", j = seq_len(ncol(y)))
+    )
+    fit2 <- radEmu::emuFit(
+      formula = ~ Rhinitis,
+      data = samp,
+      Y = y,
+      cluster = samp$school_id,
+      test_kj = data.frame(k = "Rhinitis", j = seq_len(ncol(y)))
+    )
+    fit3 <- radEmu::emuFit(
+      formula = ~ Wheezing,
+      data = samp,
+      Y = y,
+      cluster = samp$school_id,
+      test_kj = data.frame(k = "Wheezing", j = seq_len(ncol(y)))
+    )
+    fit4 <- radEmu::emuFit(
+      formula = ~ allergy_symptoms,
+      data = samp,
+      Y = y,
+      cluster = samp$school_id,
+      test_kj = data.frame(k = "allergy_symptoms", j = seq_len(ncol(y)))
+    )
+  },
+  path = "source/extra_microbiome_analyses_cache/"
+)
+
+ecz <- fit1$coef %>%
+  filter(covariate == "Eczema") %>%
+  mutate(taxon_id = category) %>%
+  left_join(y1$taxa) %>%
+  select(covariate, name, estimate, pval)
+ecz
+
+rhi <- fit2$coef %>%
+  filter(covariate == "Rhinitis") %>%
+  mutate(taxon_id = category) %>%
+  left_join(y1$taxa) %>%
+  select(covariate, name, estimate, pval)
+rhi
+
+whe <- fit3$coef %>%
+  filter(covariate == "Wheezing") %>%
+  mutate(taxon_id = category) %>%
+  left_join(y1$taxa) %>%
+  select(covariate, name, estimate, pval)
+whe
+
+sym <- fit4$coef %>%
+  filter(covariate == "allergy_symptoms") %>%
+  mutate(taxon_id = category) %>%
+  left_join(y1$taxa) %>%
+  select(covariate, name, estimate, pval)
+sym
+
+skintaxa <- rbind(ecz, rhi, whe, sym)
+
+sigtax <- skintaxa %>%
+  filter(pval < 0.05 &
+           covariate %in% c("Eczema", "Rhinitis", "Wheezing", "allergy_symptoms"))
+skintaxa <- skintaxa %>%
+  filter(name %in% sigtax$name) %>%
+  mutate(significance = ifelse(pval < 0.05, "*", "")) %>%
+  mutate(
+    covariate = fct_recode(
+      covariate,
+      "Eczema symptoms" = "Eczema",
+      "Rhinitis symptoms" = "Rhinitis",
+      "Wheezing & asthma symptoms" = "Wheezing",
+      "Allergy categories count" = "allergy_symptoms",
+      "Urban landscape" = "landscape_typelow naturalness",
+      "Grey schoolground" = "school_contextlow greenness",
+      "Natural elements score" = "natural_elements_score"
+    )
+  ) %>%
+  mutate(
+    covariate = fct_relevel(
+      covariate,
+      "Urban landscape",
+      "Grey schoolground",
+      "Natural elements score",
+      "Eczema symptoms",
+      "Rhinitis symptoms",
+      "Wheezing & asthma symptoms",
+      "Allergy categories count"
+    )
+  )
+
+ggplot(skintaxa, aes(y = covariate, x = name, fill = estimate)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "darkgreen", mid = "white", high = "darkorange") +
+  geom_text(aes(label = significance), color = "black", size = 5) +
+  xlab("Skin ASVs") +
+  ylab("") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = -45, hjust = 0))
+```
+
+
+# Models for class diversity
+
+```{r}
+data <- data %>%
+  mutate(
+    loglib = log(lib_size),
+    log_skin_simp = log(skin_simpson),
+    log_skin_rich = log(skin_richness)
+  )
+
+kruskal.test(Gamma_richness ~ school_id, data = data)
+
+p <- c()
+est <- c()
+outcome <- c()
+rs <- c()
+class <- c()
+plots <- c()
+for (c in classes) {
+  cl <- classdiv %>%
+    filter(classes == c)
+  dat <- data %>%
+    select(
+      Eczema,
+      Wheezing,
+      Rhinitis,
+      biological_sex,
+      garden_score,
+      log_skin_simp,
+      log_skin_rich,
+      rich = cl$namesrich,
+      simp = cl$namessimp,
+      loglib,
+      landscape_type,
+      school_context,
+      school_id
+    ) %>%
+    mutate(log_rich = log(rich), log_simp = log(simp))
+  lm <- glmer(
+    Eczema ~ log_simp * log_skin_simp + biological_sex + (1 | school_id),
+    family = binomial,
+    data = dat
+  )
+  rs <- append(rs, "InverseSimpson")
+  outcome <- append(outcome, "Eczema")
+  p <- append(p, coef(summary(lm))[2, 4])
+  est <- append(est, coef(summary(lm))[2, 1])
+  class <- append(class, c)
+  lm <- glmer(
+    Rhinitis ~ log_simp * log_skin_simp + biological_sex + (1 | school_id),
+    family = binomial,
+    data = dat
+  )
+  rs <- append(rs, "InverseSimpson")
+  outcome <- append(outcome, "Rhinitis")
+  p <- append(p, coef(summary(lm))[2, 4])
+  est <- append(est, coef(summary(lm))[2, 1])
+  class <- append(class, c)
+  lm <- glmer(
+    Wheezing ~ log_simp * log_skin_simp + (1 | school_id),
+    family = binomial,
+    data = dat
+  )
+  rs <- append(rs, "InverseSimpson")
+  outcome <- append(outcome, "Wheezing")
+  p <- append(p, coef(summary(lm))[2, 4])
+  est <- append(est, coef(summary(lm))[2, 1])
+  class <- append(class, c)
+  lm <- glmer(
+    Eczema ~ log_rich * log_skin_rich + biological_sex + (1 | school_id),
+    family = binomial,
+    data = dat
+  )
+  rs <- append(rs, "Richness")
+  outcome <- append(outcome, "Eczema")
+  p <- append(p, coef(summary(lm))[2, 4])
+  est <- append(est, coef(summary(lm))[2, 1])
+  class <- append(class, c)
+  lm <- glmer(
+    Rhinitis ~ log_rich * log_skin_rich + biological_sex + (1 | school_id),
+    family = binomial,
+    data = dat
+  )
+  rs <- append(rs, "Richness")
+  outcome <- append(outcome, "Rhinitis")
+  p <- append(p, coef(summary(lm))[2, 4])
+  est <- append(est, coef(summary(lm))[2, 1])
+  class <- append(class, c)
+  lm <- glmer(
+    Wheezing ~ log_rich * log_skin_rich + (1 | school_id),
+    family = binomial,
+    data = dat
+  )
+  rs <- append(rs, "Richness")
+  outcome <- append(outcome, "Wheezing")
+  p <- append(p, coef(summary(lm))[2, 4])
+  est <- append(est, coef(summary(lm))[2, 1])
+  class <- append(class, c)
+  kr <- kruskal.test(log_rich ~ school_context, data = dat)
+  rs <- append(rs, "None")
+  outcome <- append(outcome, "alogrich")
+  p <- append(p, kr$p.value)
+  est <- append(est, as.numeric(kr$statistic))
+  class <- append(class, c)
+  plots <- append(
+    plots,
+    ggplot(dat, aes(x = school_context, y = log_rich)) +
+      geom_boxplot() +
+      labs(title = c))
+}
+glmer_outcome <- tibble(class, outcome, rs, est, p) %>%
+  filter(rs %in% c("Richness", "None"))
+```
+
+
+# Permanovas for skin
+
+skin community variation significantly linked with wheezing and asthma (R2 = 0.003)
+no effect from pollution
+by far largest effect from school ID
+
+```{r}
+perform_adonis(runs, c("Eczema", "Wheezing", "Rhinitis", "school_id")) # wheezing
+perform_adonis(runs, c("pm10", "sirm", "bc", "Eczema", "school_id"))
+perform_adonis(runs, c("pm10", "sirm", "bc", "Rhinitis", "school_id"))
+perform_adonis(runs, c("pm10", "sirm", "bc", "Wheezing", "school_id"))
+perform_adonis(
+  runs,
+  c(
+    "biological_sex",
+    "natural_elements_score",
+    "nature_exposure",
+    "school_context",
+    "landscape_type",
+    "ses",
+    "school_ses",
+    "school_id"
+  )
+) # "ses" not signficant AFTER school
+
+rsq <- c()
+pv <- c()
+factors <- c(
+  "sirm",
+  "t_score_phy",
+  "Eczema",
+  "Rhinitis",
+  "Wheezing",
+  "allergy_symptoms",
+  "school_id",
+  "ses",
+  "landscape_type",
+  "school_context",
+  "natural_elements_score",
+  "nature_connectedness"
+) # "no2" , "pm10", "pm25", "bc",
+
+for (f in factors) {
+  ad <- perform_adonis(
+    runs,
+    c(f, "biological_sex"),
+    by = "margin",
+    permutations = 999
+  )
+  rsq <- append(rsq, ad$R2[1])
+  pv <- append(pv, ad$`Pr(>F)`[1])
+}
+
+perm <- tibble(factors, rsq, pv) %>%
+  mutate(significant = ifelse(pv < 0.05, "T", "F")) %>%
+  mutate(factors = fct_relevel(
+    factors,
+    c(
+      "no2",
+      "pm10",
+      "pm25",
+      "bc",
+      "sirm",
+      "allergy_symptoms",
+      "Wheezing",
+      "Rhinitis",
+      "Eczema",
+      "t_score_phy",
+      "ses",
+      "nature_connectedness",
+      "school_id",
+      "natural_elements_score",
+      "school_context",
+      "landscape_type"
+    )
+  )) # %>%
+# filter(factors%!in% c("t_score_phy","no2" , "pm10", "pm25", "bc"))
+
+p <- ggplot(perm, aes(x = factors, y = rsq)) +
+  geom_rect(
+    aes(
+      xmin = as.numeric(factors) - 0.4,
+      xmax = as.numeric(factors) + 0.4,
+      ymin = 0.001, ymax = rsq
+    ),
+    fill = "darkblue"
+  ) +
+  # geom_col(fill="darkblue")+
+  geom_point(shape = 8, size = 1, aes(y = rsq + rsq * 0.2, alpha = significant)) +
+  scale_alpha_manual(values = c(0, 1), guide = "none") +
+  scale_y_continuous(
+    trans = "log10",
+    limits = c(0.001, 1), # avoid zero (log undefined) & give room
+    breaks = c(0.001, 0.01, 0.05, 0.1, 0.2, 1),
+    labels = scales::label_number()
+  ) +
+  scale_x_discrete(
+    labels = c(
+      "school_id" = "School ID",
+      "no2" = "Modelled NO2",
+      "pm10" = "Modelled PM10",
+      "pm25" = "Modelled PM2.5",
+      "bc" = "Modelled black carbon",
+      "sirm" = "SIRM (local air pollution)",
+      "ses" = "Child's SES",
+      "natural_elements_score" = "Natural elements score",
+      "school_context" = "Schoolyard greenness",
+      "landscape_type" = "Landscape type",
+      "nature_connectedness" = "Nature connectedness",
+      "Wheezing" = "Wheezing and asthma",
+      "t_score_phy" = "Physical activity and health",
+      "allergy_symptoms" = "Allergy categories count"
+    )
+  ) +
+  xlab("") +
+  ylab("PERMANOVA R squared (beta diversity) skin") +
+  # ylim(values=c(0,0.2))+
+  coord_flip() +
+  theme(
+    panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_text(margin = margin(r = -8)),
+    panel.background = element_rect(fill = "transparent"),
+    plot.background = element_rect(fill = "transparent", color = NA)
+  )
+p
+```
+
+
+# Permanovas for environment
+
+The adonis2 function was modified to perform permutations only for the variable of interest and with the parameter by=’margin’.
+For each effect of interest, we tested the following model: ~ e_i + landscape type + sample type.
+In this model, e_i is the effect of interest, landscape type is low or high naturalness environment of the school, sample type is the origin of the microbiome (plant, sand, dirt, or dust).
+
+```{r}
+means <- runs$samples %>%
+  drop_na(t_score_phy) %>%
+  group_by(school_id) %>%
+  summarize(mean_score_phy = mean(t_score_phy),
+            ne = sum(!is.na(t_score_phy))) %>%
+  mutate(mean_score_phy = ifelse(ne < 3, NA, mean_score_phy)) %>%
+  select(-ne) %>%
+  full_join(allergies)
+rune$samples <- rune$samples %>%
+  left_join(means)
+
+# for all env samples
+
+rsq <- c()
+pv <- c()
+factors <- c(
+  "sample_type",
+  "sirm",
+  "school_id",
+  "school_ses",
+  "landscape_type",
+  "school_context",
+  "natural_elements_score"
+) # , "mean_score_phy", "meaneczema", "meanrhinitis", "meanwheezing", "allergy_symptoms","no2" , "pm10", "pm25", "bc",
+for (f in factors) {
+  ad <- perform_adonis(
+    rune,
+    c(f, "landscape_type", "sample_type"),
+    by = "margin",
+    permutations = 999
+  )
+  rsq <- append(rsq, ad$R2[1])
+  pv <- append(pv, ad$`Pr(>F)`[1])
+}
+perm <- tibble(factors, rsq, pv) %>%
+  mutate(significant = ifelse(pv < 0.05, "T", "F")) %>%
+  mutate(factors = fct_relevel(
+    factors,
+    c(
+      "sample_type",
+      "sirm",
+      "school_id",
+      "school_ses",
+      "natural_elements_score",
+      "school_context",
+      "landscape_type"
+    )
+  )) # , "allergy_symptoms", "meanwheezing", "meanrhinitis", "meaneczema", "mean_score_phy""no2" , "pm10", "pm25", "bc",
+
+p <- ggplot(perm, aes(x = factors, y = rsq)) +
+  geom_rect(
+    aes(
+      xmin = as.numeric(factors) - 0.4,
+      xmax = as.numeric(factors) + 0.4,
+      ymin = 0.001,
+      ymax = rsq
+    ),
+    fill = "darkblue"
+  ) +
+  geom_point(shape = 8, aes(y = rsq + rsq * 0.2, alpha = significant)) +
+  scale_alpha_manual(values = c(0, 1), guide = "none") +
+  scale_y_continuous(
+    trans = "log10",
+    limits = c(0.001, 0.5),
+    # avoid zero (log undefined) & give room
+    breaks = c(0.001, 0.01, 0.1, 0.3),
+    labels = scales::label_number()
+  ) +
+  #  scale_y_continuous(trans="log10") +
+  scale_x_discrete(
+    labels = c(
+      "school_id" = "School ID",
+      "sample_type" = "Sample type",
+      "no2" = "Modelled NO2",
+      "pm10" = "Modelled PM10",
+      "pm25" = "Modelled PM2.5",
+      "bc" = "Modelled black carbon",
+      "sirm" = "SIRM (local air pollution)",
+      "school_ses" = "School mean SES",
+      "natural_elements_score" = "Natural elements score",
+      "school_context" = "School context",
+      "landscape_type" = "Landscape type"
+    )
+  ) +
+  xlab("") +
+  ylab("PERMANOVA R squared\nall environmental samples") +
+  # ylim(values=c(0,0.27))+
+  coord_flip() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.background = element_rect(fill = "transparent"),
+    plot.background = element_rect(fill = "transparent", color = NA)
+  )
+p
+
+# for soil/dust env samples only
+
+
+rund <- rune %>%
+  filter_samples(sample_type %in% c("dust", "sand", "dirt"))
+
+rsq <- c()
+pv <- c()
+factors <- c(
+  "sample_type",
+  "no2",
+  "pm10",
+  "pm25",
+  "bc",
+  "sirm",
+  "school_id",
+  "school_ses",
+  "landscape_type",
+  "school_context",
+  "natural_elements_score"
+) # "mean_score_phy", "meaneczema", "meanrhinitis", "meanwheezing", "allergy_symptoms",
+for (f in factors) {
+  ad <- perform_adonis(rund,
+                       c(f, "landscape_type"),
+                       by = "margin",
+                       permutations = 999)
+  rsq <- append(rsq, ad$R2[1])
+  pv <- append(pv, ad$`Pr(>F)`[1])
+}
+perm <- tibble(factors, rsq, pv) %>%
+  mutate(significant = ifelse(pv < 0.05, "T", "F")) %>%
+  mutate(factors = fct_relevel(
+    factors,
+    c(
+      "sample_type",
+      "no2",
+      "pm10",
+      "pm25",
+      "bc",
+      "sirm",
+      "school_id",
+      "school_ses",
+      "natural_elements_score",
+      "school_context",
+      "landscape_type"
+    )
+  )) # "allergy_symptoms", "meanwheezing", "meanrhinitis", "meaneczema", "mean_score_phy",
+p <- ggplot(perm, aes(x = factors, y = rsq * 100)) +
+  geom_col(fill = "darkblue") +
+  geom_point(shape = 8, aes(y = rsq * 100 + 0.5, alpha = significant)) +
+  scale_alpha_manual(values = c(0, 1), guide = "none") +
+  #  scale_y_continuous(trans="log10") +
+  scale_x_discrete(
+    labels = c(
+      "school_id" = "School ID",
+      "sample_type" = "Sample type",
+      "no2" = "Modelled NO2",
+      "pm10" = "Modelled PM10",
+      "pm25" = "Modelled PM2.5",
+      "bc" = "Modelled black carbon",
+      "sirm" = "SIRM (local air pollution)",
+      "school_ses" = "School mean SES",
+      "natural_elements_score" = "Natural elements score",
+      "school_context" = "School context",
+      "landscape_type" = "Landscape type"
+    )
+  ) +
+  xlab("") +
+  ylab("Percent of community variation explained") +
+  # ylim(values=c(0,0.47))+
+  coord_flip() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.background = element_rect(fill = "transparent"),
+    plot.background = element_rect(fill = "transparent", color = NA)
+  )
+p
+
+# for plant samples only
+
+runp <- rune %>%
+  filter_samples(sample_type == "plant")
+rsq <- c()
+pv <- c()
+factors <- c(
+  "sirm",
+  "school_id",
+  "school_ses",
+  "landscape_type",
+  "school_context",
+  "natural_elements_score"
+) # "no2" , "pm10", "pm25", "bc",
+
+for (f in factors) {
+  ad <- perform_adonis(runp,
+                       c(f, "landscape_type"),
+                       by = "margin",
+                       permutations = 999)
+  rsq <- append(rsq, ad$R2[1])
+  pv <- append(pv, ad$`Pr(>F)`[1])
+}
+
+perm <- tibble(factors, rsq, pv) %>%
+  mutate(significant = ifelse(pv < 0.05, "T", "F")) %>%
+  mutate(factors = fct_relevel(
+    factors,
+    c(
+      "sirm",
+      "school_id",
+      "school_ses",
+      "natural_elements_score",
+      "school_context",
+      "landscape_type"
+    )
+  )) # "no2" , "pm10", "pm25", "bc",
+
+p <- ggplot(perm, aes(x = factors, y = rsq)) +
+  geom_rect(
+    aes(
+      xmin = as.numeric(factors) - 0.4,
+      xmax = as.numeric(factors) + 0.4,
+      ymin = 0.001,
+      ymax = rsq
+    ),
+    fill = "darkblue"
+  ) +
+  geom_point(shape = 8, aes(y = rsq + rsq * 0.2, alpha = significant)) +
+  scale_alpha_manual(values = c(0, 1), guide = "none") +
+  scale_y_continuous(
+    trans = "log10",
+    limits = c(0.001, 1),
+    # avoid zero (log undefined) & give room
+    breaks = c(0.001, 0.01, 0.1, 0.5),
+    labels = scales::label_number()
+  ) +
+  #  scale_y_continuous(trans="log10") +
+  scale_x_discrete(
+    labels = c(
+      "school_id" = "School ID",
+      "no2" = "Modelled NO2",
+      "pm10" = "Modelled PM10",
+      "pm25" = "Modelled PM2.5",
+      "bc" = "Modelled black carbon",
+      "sirm" = "SIRM (local air pollution)",
+      "school_ses" = "School mean SES",
+      "natural_elements_score" = "Natural elements score",
+      "school_context" = "School context",
+      "landscape_type" = "Landscape type"
+    )
+  ) +
+  xlab("") +
+  ylab("PERMANOVA R squared\nplant samples") +
+  # ylim(values=c(0,0.27))+
+  coord_flip() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.background = element_rect(fill = "transparent"),
+    plot.background = element_rect(fill = "transparent", color = NA)
+  )
+p
+
+
+
+# for dust samples only
+
+runp <- rune %>%
+  filter_samples(sample_type == "dust")
+rsq <- c()
+pv <- c()
+factors <- c(
+  "no2",
+  "pm10",
+  "pm25",
+  "bc",
+  "sirm",
+  "school_id",
+  "school_ses",
+  "landscape_type",
+  "school_context",
+  "natural_elements_score"
+)
+
+for (f in factors) {
+  ad <- perform_adonis(runp,
+                       c(f, "landscape_type"),
+                       by = "margin",
+                       permutations = 999)
+  rsq <- append(rsq, ad$R2[1])
+  pv <- append(pv, ad$`Pr(>F)`[1])
+}
+
+perm <- tibble(factors, rsq, pv) %>%
+  mutate(significant = ifelse(pv < 0.05, "T", "F")) %>%
+  mutate(factors = fct_relevel(
+    factors,
+    c(
+      "no2",
+      "pm10",
+      "pm25",
+      "bc",
+      "sirm",
+      "school_id",
+      "school_ses",
+      "natural_elements_score",
+      "school_context",
+      "landscape_type"
+    )
+  ))
+
+p <- ggplot(perm, aes(x = factors, y = rsq)) +
+  geom_rect(
+    aes(
+      xmin = as.numeric(factors) - 0.4,
+      xmax = as.numeric(factors) + 0.4,
+      ymin = 0.001,
+      ymax = rsq
+    ),
+    fill = "darkblue"
+  ) +
+  geom_point(shape = 8, aes(y = rsq + rsq * 0.2, alpha = significant)) +
+  scale_alpha_manual(values = c(0, 1), guide = "none") +
+  scale_y_continuous(
+    trans = "log10",
+    limits = c(0.001, 1),
+    # avoid zero (log undefined) & give room
+    breaks = c(0.001, 0.01, 0.1, 0.5),
+    labels = scales::label_number()
+  ) +
+  #  scale_y_continuous(trans="log10") +
+  scale_x_discrete(
+    labels = c(
+      "school_id" = "School ID",
+      "no2" = "Modelled NO2",
+      "pm10" = "Modelled PM10",
+      "pm25" = "Modelled PM2.5",
+      "bc" = "Modelled black carbon",
+      "sirm" = "SIRM (local air pollution)",
+      "school_ses" = "School mean SES",
+      "natural_elements_score" = "Natural elements score",
+      "school_context" = "School context",
+      "landscape_type" = "Landscape type"
+    )
+  ) +
+  xlab("") +
+  ylab("PERMANOVA R squared\ndust samples") +
+  # ylim(values=c(0,0.27))+
+  coord_flip() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.background = element_rect(fill = "transparent"),
+    plot.background = element_rect(fill = "transparent", color = NA)
+  )
+p
+```
+
+
+# alphas for environment: inverse simpson
+
+```{r}
+runer <- rune %>%
+  add_total_count() %>%
+  add_alpha(method = "invsimpson") %>%
+  add_alpha(method = "obs")
+
+simps <- runer$samples %>%
+  group_by(sample_type, school_id) %>%
+  reframe(
+    mean_simpson = mean(invsimpson),
+    total_count = mean(total_count),
+    sample_type = sample_type
+  ) %>%
+  unique()
+
+obs <- runer$samples %>%
+  group_by(sample_type, school_id) %>%
+  reframe(mean_richness = median(obs), sample_type = sample_type) %>%
+  unique()
+
+sdata <- rune %>%
+  select_samples(
+    school_id,
+    sample_id,
+    no2,
+    pm10,
+    pm25,
+    bc,
+    sirm,
+    meaneczema,
+    meanrhinitis,
+    meanwheezing,
+    allergy_symptoms,
+    school_ses,
+    landscape_type,
+    school_context,
+    natural_elements_score,
+    tree_number
+  ) %>%
+  aggregate_samples()
+
+data <- simps %>%
+  left_join(obs) %>%
+  left_join(select(sdata$samples, -sample_id)) |> 
+  mutate(
+    sample_type = factor(
+      sample_type,
+      levels = c("dirt", "dust", "sand", "plant"),
+      labels = c("ground", "ground", "ground", "plant")
+    )
+  )
+
+# expect negative binomial or poisson distribution
+
+rsq <- c()
+pv <- c()
+ste <- c()
+factors <- c(
+  "sirm",
+  "school_ses",
+  "landscape_type",
+  "school_context",
+  "natural_elements_score",
+  "sample_type"
+) # "allergy_symptoms", "mean_score_phy", "meaneczema", "meanrhinitis", "meanwheezing","no2" , "pm10", "pm25", "bc",
+mod <- glmmTMB(
+  mean_simpson ~ sirm 
+  + offset(log(total_count))
+  + (1 | school_id),
+  family = Gamma(link = "log"), data = data
+)
+rsq <- append(rsq, coef(summary(mod))$cond[2, 1])
+pv <- append(pv, coef(summary(mod))$cond[2, 4])
+ste <- append(ste, coef(summary(mod))$cond[2, 2])
+
+mod <- glmmTMB(
+  mean_simpson ~ school_ses
+  + offset(log(total_count))
+  + (1 | school_id),
+  family = Gamma(link = "log"), data = data
+)
+rsq <- append(rsq, coef(summary(mod))$cond[2, 1])
+pv <- append(pv, coef(summary(mod))$cond[2, 4])
+ste <- append(ste, coef(summary(mod))$cond[2, 2])
+
+mod <- glmmTMB(
+  mean_simpson ~ landscape_type
+  + offset(log(total_count))
+  + (1 | school_id),
+  family = Gamma(link = "log"), data = data
+)
+rsq <- append(rsq, coef(summary(mod))$cond[2, 1])
+pv <- append(pv, coef(summary(mod))$cond[2, 4])
+ste <- append(ste, coef(summary(mod))$cond[2, 2])
+
+mod <- glmmTMB(
+  mean_simpson ~ school_context
+  + offset(log(total_count))
+  + (1 | school_id),
+  family = Gamma(link = "log"),
+  data = data
+)
+rsq <- append(rsq, coef(summary(mod))$cond[2, 1])
+pv <- append(pv, coef(summary(mod))$cond[2, 4])
+ste <- append(ste, coef(summary(mod))$cond[2, 2])
+
+mod <- glmmTMB(
+  mean_simpson ~ natural_elements_score
+  + offset(log(total_count))
+  + (1 | school_id),
+  family = Gamma(link = "log"),
+  data = data
+)
+rsq <- append(rsq, coef(summary(mod))$cond[2, 1])
+pv <- append(pv, coef(summary(mod))$cond[2, 4])
+ste <- append(ste, coef(summary(mod))$cond[2, 2])
+
+mod <- glmmTMB(
+  mean_simpson ~ sample_type
+  + offset(log(total_count))
+  + (1 | school_id),
+  family = Gamma(link = "log"),
+  data = data
+)
+rsq <- append(rsq, coef(summary(mod))$cond[2, 1])
+pv <- append(pv, coef(summary(mod))$cond[2, 4])
+ste <- append(ste, coef(summary(mod))$cond[2, 2])
+
+perm <- tibble(factors, rsq, pv, ste) %>%
+  mutate(significant = ifelse(pv < 0.05, "T", "F")) %>%
+  mutate(pv = round(pv, digits = 3)) %>%
+  mutate(pv = ifelse(pv == 0, "< 0.001", pv)) %>%
+  mutate(factors = fct_relevel(
+    factors,
+    c(
+      "sample_type",
+      "sirm",
+      "school_ses",
+      "natural_elements_score",
+      "school_context",
+      "landscape_type"
+    )
+  )) # "allergy_symptoms", "meanwheezing", "meanrhinitis", "meaneczema", "mean_score_phy",,"no2" , "pm10", "pm25", "bc"
+
+p <- ggplot(perm, aes(x = factors, y = rsq)) +
+  geom_hline(
+    yintercept = 0,
+    linetype = "dotted",
+    color = "grey",
+    size = 0.5
+  ) +
+  geom_point(color = "darkblue") +
+  geom_errorbar(aes(ymin = rsq - ste, ymax = rsq + ste),
+                width = .2,
+                position = position_dodge(.9)) +
+  geom_text(size = 2.5, aes(label = paste("p =", pv, sep = " "), y = rsq + ste + 0.35)) +
+  geom_point(shape = 8, aes(y = rsq + ste + 0.7, alpha = significant)) +
+  scale_alpha_manual(values = c(0, 1), guide = "none") +
+  geom_hline(yintercept = 0,
+             linetype = "dotted",
+             linewidth = 0.5) +
+  #  scale_y_continuous(trans="log10") +
+  scale_x_discrete(
+    labels = c(
+      "sample_type" = "Sample type (plant)",
+      "no2" = "Modelled NO2",
+      "pm10" = "Modelled PM10",
+      "pm25" = "Modelled PM2.5",
+      "bc" = "Modelled black carbon",
+      "sirm" = "SIRM (local air pollution)",
+      "school_ses" = "School mean SES",
+      "natural_elements_score" = "Natural elements score",
+      "school_context" = "Non-green schoolyard",
+      "landscape_type" = "Landscape type (urban)"
+    )
+  ) +
+  xlab("") +
+  ylab("Log-scale effect on Inverse Simpson\n(including all environmental samples)") +
+  #  ylim(values=c(0,0.02))+
+  coord_flip() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.background = element_rect(fill = "transparent"),
+    plot.background = element_rect(fill = "transparent", color = NA)
+  )
+p
+```
+
+
+# alphas for environment: richness
+
+```{r}
+data$mean_richness <- as.integer(data$mean_richness)
+ggplot(data, aes(mean_richness)) +
+  geom_histogram()
+
+rsq <- c()
+pv <- c()
+ste <- c()
+factors <- c("sirm", "school_ses", "landscape_type", "school_context", "natural_elements_score", "sample_type") # "no2" , "pm10", "pm25", "bc",
+
+mod <- glmmTMB(
+  mean_richness ~ sirm
+  + offset(log(total_count))
+  + (1 | school_id),
+  family = poisson, data = data)
+rsq <- append(rsq, coef(summary(mod))$cond[2, 1])
+pv <- append(pv, coef(summary(mod))$cond[2, 4])
+ste <- append(ste, coef(summary(mod))$cond[2, 2])
+
+mod <- glmmTMB(
+  mean_richness ~
+    school_ses 
+  + offset(log(total_count))
+  + (1 | school_id),
+  family = poisson, data = data)
+rsq <- append(rsq, coef(summary(mod))$cond[2, 1])
+pv <- append(pv, coef(summary(mod))$cond[2, 4])
+ste <- append(ste, coef(summary(mod))$cond[2, 2])
+
+mod <- glmmTMB(
+  mean_richness ~ landscape_type
+  + offset(log(total_count))
+  + (1 | school_id),
+ family = poisson, data = data)
+rsq <- append(rsq, coef(summary(mod))$cond[2, 1])
+pv <- append(pv, coef(summary(mod))$cond[2, 4])
+ste <- append(ste, coef(summary(mod))$cond[2, 2])
+
+mod <- glmmTMB(
+  mean_richness ~ school_context 
+  + offset(log(total_count))
+  + (1 | school_id),
+  family = poisson,
+  data = data
+)
+rsq <- append(rsq, coef(summary(mod))$cond[2, 1])
+pv <- append(pv, coef(summary(mod))$cond[2, 4])
+ste <- append(ste, coef(summary(mod))$cond[2, 2])
+
+mod <- glmmTMB(
+  mean_richness ~ natural_elements_score
+  + offset(log(total_count))
+  + (1 | school_id),
+  family = poisson, data = data)
+rsq <- append(rsq, coef(summary(mod))$cond[2, 1])
+pv <- append(pv, coef(summary(mod))$cond[2, 4])
+ste <- append(ste, coef(summary(mod))$cond[2, 2])
+
+mod <- glmmTMB(
+  mean_richness ~ sample_type
+  + offset(log(total_count))
+  + (1 | school_id),
+ family = poisson, data = data)
+rsq <- append(rsq, coef(summary(mod))$cond[2, 1])
+pv <- append(pv, coef(summary(mod))$cond[2, 4])
+ste <- append(ste, coef(summary(mod))$cond[2, 2])
+
+perm <- tibble(factors, rsq, pv, ste) %>%
+  mutate(significant = ifelse(pv < 0.05, "T", "F")) %>%
+  mutate(pv = round(pv, digits = 3)) %>%
+  mutate(pv = ifelse(pv == 0, "< 0.001", pv)) %>%
+  mutate(factors = fct_relevel(factors, c("sample_type", "sirm", "school_ses", "natural_elements_score", "school_context", "landscape_type"))) # "allergy_symptoms", "meanwheezing", "meanrhinitis", "meaneczema", "mean_score_phy",,"no2" , "pm10", "pm25", "bc",
+
+p <- ggplot(perm, aes(x = factors, y = rsq)) +
+  geom_hline(
+    yintercept = 0,
+    linetype = "dotted",
+    color = "grey",
+    size = 0.5
+  ) +
+  geom_point(color = "darkblue") +
+  geom_errorbar(aes(ymin = rsq - ste, ymax = rsq + ste),
+                width = .2,
+                position = position_dodge(.9)) +
+  geom_text(size = 2.5, aes(label = paste("p =", pv, sep = " "), y = rsq + ste + 0.3)) +
+  geom_point(shape = 8, aes(y = rsq + ste + 0.6, alpha = significant)) +
+  scale_alpha_manual(values = c(0, 1), guide = "none") +
+  geom_hline(yintercept = 0,
+             linetype = "dotted",
+             size = 0.5) +
+  #  scale_y_continuous(trans="log10") +
+  scale_x_discrete(
+    labels = c(
+      "sample_type" = "Sample type (plant)",
+      "no2" = "Modelled NO2",
+      "pm10" = "Modelled PM10",
+      "pm25" = "Modelled PM2.5",
+      "bc" = "Modelled black carbon",
+      "sirm" = "SIRM (local air pollution)",
+      "school_ses" = "School mean SES",
+      "natural_elements_score" = "Natural elements score",
+      "school_context" = "Non-green schoolyard",
+      "landscape_type" = "Urban landscape type"
+    )
+  ) +
+  xlab("") +
+  ylab("Log-scale effect on ASV richness\n(including all environmental samples)") +
+  #  ylim(values=c(0,0.02))+
+  coord_flip() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.background = element_rect(fill = "transparent"),
+    plot.background = element_rect(fill = "transparent", color = NA)
+  )
+p
+```
+
+
+# Transferred ASVs
+
+```{r}
+planttaxa <- planttaxa %>%
+  rename(taxon_name = name) %>%
+  left_join(taxn)
+
+runp <- rune %>%
+  #  filter_samples(sample_type=="plant")%>%
+  filter_counts(count > 3) %>%
+  mutate_samples(sample_type_gen = "environmental") %>%
+  #  filter_taxa(taxon%in%c(planttaxa$taxon))%>% # only plant ASVs related to allergies
+  select_samples(sample_id, sample_type_gen, sample_type, school_id)
+schools <- unique(runp$samples$school_id)
+
+runm <- runs %>%
+  filter_counts(count > 3) %>%
+  select_samples(
+    sample_id,
+    child_id,
+    school_id,
+    Eczema,
+    Wheezing,
+    Rhinitis,
+    landscape_type,
+    school_context,
+    natural_elements_score
+  ) %>%
+  mutate_samples(sample_type = "skin") %>%
+  mutate_samples(sample_type_gen = "skin") %>%
+  filter_samples(school_id %in% schools) %>%
+  merge_tidytacos(runp, taxon_identifier = taxon) %>%
+  select_taxa(-species) %>%
+  add_taxon_name()
+
+taxov <- taxn %>%
+  rename(taxon_name_overall = taxon_name) %>%
+  left_join(select(runm$taxa, taxon_name, taxon))
+# this code generates a table with, for each skin taxon, at how many schools there was an overlap between plant/environment and skin
+
+zeros <- (rep(0, nrow(runm$taxa)))
+taxnames <- select(runm$taxa, taxon, taxon_name)
+tax <- unique(taxnames$taxon_name)
+taxon_name <- tax
+overlap <- tibble(taxon_name, number = zeros)
+
+for (sid in schools) {
+  envtax <- runp %>%
+    filter_samples(school_id == sid) %>%
+    taxa()
+  sktax <- runs %>%
+    filter_samples(school_id == sid) %>%
+    taxa()
+  taxon <- intersect(sktax$taxon, envtax$taxon)
+  overl <- tibble(taxon) %>%
+    left_join(taxnames, by = join_by(taxon))
+  for (t in tax) {
+    if (t %in% overl$taxon_name) {
+      overlap <- overlap %>%
+        mutate(number = ifelse(taxon_name == t, number + 1, number))
+    }
+  }
+}
+
+occ <- runm %>%
+  add_prevalence(condition = "sample_type_gen") %>%
+  taxa() %>%
+  select(taxon_name, prevalence = prevalence_in_environmental)
+overlap <- overlap %>%
+  filter(number > 0) %>%
+  left_join(taxov)
+overlapf <- overlap %>%
+  filter(number > 10)
+# overlapf<-overlapf%>%
+#  mutate(type="transfer")
+
+occ <- occ %>%
+  filter(taxon_name %in% overlapf$taxon_name)
+
+# this code assesses how often plant/env taxa occurred on cheeks
+
+transfer <- runs %>%
+  filter_counts(count > 3) %>%
+  filter_taxa(taxon %in% runp$taxa$taxon) %>% # only environmental ASVs
+  add_prevalence(relative = T) %>%
+  taxa() %>%
+  left_join(taxov) %>%
+  select(taxon_name_overall, child = prevalence)
+
+trov <- overlap %>%
+  mutate(school = number / 30) %>%
+  left_join(transfer, by = join_by(taxon_name_overall)) %>%
+  select(-taxon_name, -taxon, -number)
+
+trov2 <- trov %>%
+  pivot_longer(!taxon_name_overall, names_to = "type_of_transfer", values_to = "number")
+```
+
+
+
+```{r fig-transfer-plant-child-1, fig.height=200/25.4}
+# this figure shows transfer per child in the plant ASV heatmap
+planttaxa2 <- planttaxa %>%
+  #  filter(pval<0.05)%>%
+  rename(taxon_name_overall = taxon_name) %>%
+  select(-taxon)
+transfer2 <- transfer %>%
+  filter(taxon_name_overall %in% planttaxa2$taxon_name_overall) %>%
+  mutate(
+    covariate = "Transferred",
+    pval = NA,
+    significance = round(child, digits = 2)
+  ) %>% # text in block
+  mutate(estimate = -child * 20) %>% # color adjustement
+  select(-child)
+planttaxa2 <- rbind(planttaxa2, transfer2)
+
+ggplot(planttaxa2,
+       aes(y = covariate, x = taxon_name_overall, fill = estimate)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "darkgreen", mid = "white", high = "darkorange") +
+  geom_text(aes(label = significance), color = "black", size = 2) +
+  xlab("Plant ASVs") +
+  ylab("") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = -45, hjust = 0))
+```
+
+
+```{r fig-transfer-plant-child-2}
+ggplot(transfer2, aes(x = taxon_name_overall, y = significance)) +
+  geom_bar(stat = "identity") +
+  ylab("prev. in children") +
+  xlab("") +
+  theme_bw() +
+  theme(axis.text.x = element_blank())
+```
+
+
+
+
