@@ -56,6 +56,7 @@ tidy_count_to_matrix <- function(counts, value = count) {
     as.matrix() %>%
     `row.names<-`(counts_wide$sample_id)
 }
+set.seed(59206)
 ```
 
 ```{r cache=TRUE, results='hide'}

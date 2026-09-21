@@ -58,6 +58,7 @@ data_objects_folder <- here(
 
 fs::dir_create(model_folder)
 fs::dir_create(data_objects_folder)
+set.seed(259754)
 ```
 
 ```{r cache=TRUE, results='hide'}
@@ -695,6 +696,7 @@ mv_adj_mi_ks <- brm(
     silent = 2,
     refresh = 0,
     chains = 4,
+    seed = 628213,
     backend = "cmdstanr",
     normalize = FALSE,
     file_refit = "on_change",
@@ -1634,6 +1636,7 @@ mv_adj_mi_isaac_ses_skin <- brm(
     silent = 2,
     refresh = 0,
     chains = 4,
+    seed = 889758,
     backend = "cmdstanr",
     normalize = FALSE,
     file_refit = "on_change",
@@ -2952,6 +2955,7 @@ mv_adj_mi_nisaac <- brm(
     silent = 2,
     refresh = 0,
     chains = 4,
+    seed = 619133,
     backend = "cmdstanr",
     normalize = FALSE,
     file_refit = "on_change",
@@ -4161,6 +4165,7 @@ mv_adj_mi_skin <- brm(
     silent = 2,
     refresh = 0,
     chains = 4,
+    seed = 554510,
     backend = "cmdstanr",
     normalize = FALSE,
     file_refit = "on_change",
