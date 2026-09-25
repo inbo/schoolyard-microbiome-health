@@ -32,7 +32,7 @@ contact:
   affiliation: Research Institute for Nature and Forest (INBO)
   orcid: 0000-0001-8595-8426
 doi: 10.5281/zenodo.21296003
-license: CC BY 4.0
+license: CC-BY-4.0
 repository-code: https://github.com/inbo/schoolyard-microbiome-health/
 type: software
 abstract: "This repository contains code and supplementary data to reproduce the analyses
