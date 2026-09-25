@@ -1570,7 +1570,7 @@
     },
     "citeme": {
       "Package": "citeme",
-      "Version": "0.1.4",
+      "Version": "0.2.0",
       "Source": "GitHub",
       "Title": "Manage Person and Organisation Information",
       "Authors@R": "c( person(\"Thierry\", \"Onkelinx\", , \"thierry.onkelinx@inbo.be\", role = c(\"aut\", \"cre\"), comment = c(ORCID = \"0000-0001-8804-4216\", affiliation = \"Research Institute for Nature and Forest (INBO)\")), person(\"Research Institute for Nature and Forest (INBO)\", , , \"info@inbo.be\", role = c(\"cph\", \"fnd\", \"pbl\"), comment = c(ROR = \"00j54wy13\")) )",
@@ -1612,8 +1612,8 @@
       "RemoteHost": "api.github.com",
       "RemoteUsername": "inbo",
       "RemoteRepo": "citeme",
-      "RemoteRef": "main",
-      "RemoteSha": "b107ca1ee476082e0edcb4f49e94244fe0e4da93"
+      "RemoteRef": "34f23989cff73396cc7b90fc7e2c1bbfe29f7026",
+      "RemoteSha": "34f23989cff73396cc7b90fc7e2c1bbfe29f7026"
     },
     "cli": {
       "Package": "cli",
