@@ -527,9 +527,6 @@ dat <- data %>%
 sum(dat$Rhinitis) / nrow(dat)
 ```
 
-
-# Allergy-specific bacteria in plants (radEmu)
-
 Unify ASV names across environmental and skin taxa:
 
 ```{r}
@@ -540,187 +537,156 @@ taxn <- runs %>%
   add_taxon_name() %>%
   add_prevalence() %>%
   filter_taxa(prevalence > 2)
+
 taxn <- taxn$taxa %>%
   select(taxon_name, taxon)
 ```
 
-Are 100 most prevalent plant taxa related to any of the allergies?
+# Allergy-specific bacteria in plants (radEmu)
+
+Are most prevalent plant taxa related to any of the allergies?
 (this code could take a while to run!)
 
-```{r rademu-plant-samples}
+```{r}
 # pooling 3 plant samples per school
+
 y1 <- rune %>%
   filter_samples(sample_type == "plant") %>%
-  select_samples(
-    school_id, sample_id, meaneczema, meanrhinitis, meanwheezing,
-    allergy_symptoms, natural_elements_score, school_context, landscape_type) %>%
-  aggregate_samples() %>%
-  add_prevalence()
-
-ggplot(y1$taxa, aes(x = prevalence)) +
-  geom_histogram(binwidth = 1) +
-  xlim(c(2, 30)) +
-  # ylim(c(1,500))+
-  # scale_y_log10()+
-  labs(x = "Prevalence in plant samples", y = "ASV count") +
-  geom_vline(xintercept = 7.5, col = "blue")
+  add_prevalence(relative = T)
 
 y1$samples <- drop_na(y1$samples, allergy_symptoms)
 y1$counts <- filter(y1$counts, sample_id %in% y1$samples$sample_id)
+y1$taxa <- left_join(y1$taxa, taxn)
 
-# setting up to select only the 100 most prevalent ASVs
-y1$taxa <- y1$taxa %>%
-  arrange(desc(prevalence)) %>%
-  left_join(taxn) %>%
-  mutate(keep = F) %>%
-  {
-    .$keep[1:100] <- T
-    .
-  }
+# first filter taxa then pool
 
 y1 <- y1 %>%
-  mutate_taxa(name = ifelse(keep == FALSE, "other", taxon_name)) %>%
-  select_taxa(taxon_id, name) %>%
+  select_taxa(-prevalence) %>%
+  add_prevalence(relative = T) %>%
+  add_mean_rel_abundance() %>%
+  mutate_taxa(taxon_name = ifelse(prevalence > 0.2, taxon_name, "other")) %>%
+  mutate_taxa(taxon_name =
+                ifelse(mean_rel_abundance > 0.001, taxon_name, "other")) %>%
+  select_taxa(taxon_id, taxon_name) %>%
   aggregate_taxa() %>%
-  add_prevalence(relative = F)
+  select_samples(
+    school_id, sample_id, meaneczema, meanrhinitis, meanwheezing,
+    allergy_symptoms, natural_elements_score, school_context, landscape_type
+  ) %>%
+  aggregate_samples()
 
-mostprevplant <- y1$taxa %>%
-  left_join(rune$taxa) %>%
-  select(name, family, class, phylum, prevalence)
-#write.csv(mostprevplant, "mostprevplant.csv", quote = F, row.names = F)
-
-ggplot(y1$taxa, aes(x = prevalence)) +
-  geom_histogram()
-
-samp <- select(
-  y1$samples,
-  sample_id,
-  meaneczema,
-  meanrhinitis,
-  meanwheezing,
-  allergy_symptoms,
-  school_id
-)
+samp <- select(y1$samples,
+               sample_id, meaneczema, meanrhinitis, meanwheezing,
+               allergy_symptoms, school_id)
 rownames(samp) <- samp$sample_id
 y <- tidy_count_to_matrix(y1$counts)[samp$sample_id, ]
 
-# differential abundance analysis with radEmu
-# increase tolerance for more reliable pvalues, at the cost of longer runtime
-#radEmu::make_design_matrix(formula = ~ meaneczema, data = samp, Y = y)
+# differential abundance analysis with radEmu: takes about 1 to 1.5 hours with tolerance = 1e-2
 xfun::cache_exec(
   {
     fit1 <- radEmu::emuFit(
-      formula = ~ meaneczema, data = samp, Y = y,
-      test_kj = data.frame(k = "meaneczema", j = seq_len(ncol(y))),
-      tolerance = 1e-2
+      formula = ~meaneczema, data = samp, Y = y,
+      test_kj = data.frame(k = "meaneczema", j = seq_len(ncol(y)))
     )
     fit2 <- radEmu::emuFit(
-      formula = ~ meanrhinitis, data = samp, Y = y,
-      test_kj = data.frame(k = "meanrhinitis", j = seq_len(ncol(y))),
-      tolerance = 1e-2
+      formula = ~meanrhinitis, data = samp, Y = y,
+      test_kj = data.frame(k = "meanrhinitis", j = seq_len(ncol(y)))
     )
     fit3 <- radEmu::emuFit(
-      formula = ~ meanwheezing, data = samp, Y = y,
-      test_kj = data.frame(k = "meanwheezing", j = seq_len(ncol(y))),
-      tolerance = 1e-2
+      formula = ~meanwheezing, data = samp, Y = y,
+      test_kj = data.frame(k = "meanwheezing", j = seq_len(ncol(y)))
     )
     fit4 <- radEmu::emuFit(
-      formula = ~ allergy_symptoms, data = samp, Y = y,
-      test_kj = data.frame(k = "allergy_symptoms", j = seq_len(ncol(y))),
-      tolerance = 1e-2
+      formula = ~allergy_symptoms, data = samp, Y = y,
+      test_kj = data.frame(k = "allergy_symptoms", j = seq_len(ncol(y)))
     )
   },
   path = "source/extra_microbiome_analyses_cache/"
 )
 
+plot(fit1)$plots
 ecz <- fit1$coef %>%
   filter(covariate == "meaneczema") %>%
   mutate(taxon_id = category) %>%
   left_join(y1$taxa) %>%
-  select(covariate, name, estimate, pval)
+  select(covariate, taxon_name, estimate, pval) %>%
+  # filter(prevalence>9)%>%
+  mutate(qval = p.adjust(pval, method = "BH"))
 ecz
 
+plot(fit2)$plots
 rhi <- fit2$coef %>%
   filter(covariate == "meanrhinitis") %>%
   mutate(taxon_id = category) %>%
   left_join(y1$taxa) %>%
-  select(covariate, name, estimate, pval)
+  select(covariate, taxon_name, estimate, pval) %>%
+  # filter(prevalence>9)%>%
+  mutate(qval = p.adjust(pval, method = "BH"))
 rhi
 
+plot(fit3)$plots
 whe <- fit3$coef %>%
   filter(covariate == "meanwheezing") %>%
   mutate(taxon_id = category) %>%
   left_join(y1$taxa) %>%
-  select(covariate, name, estimate, pval)
+  select(covariate, taxon_name, estimate, pval) %>%
+  # filter(prevalence>9)%>%
+  mutate(qval = p.adjust(pval, method = "BH"))
 whe
 
+plot(fit4)$plots
 sym <- fit4$coef %>%
   filter(covariate == "allergy_symptoms") %>%
   mutate(taxon_id = category) %>%
   left_join(y1$taxa) %>%
-  select(covariate, name, estimate, pval)
+  select(covariate, taxon_name, estimate, pval) %>%
+  # filter(prevalence>9)%>%
+  mutate(qval = p.adjust(pval, method = "BH"))
 sym
 
 planttaxa <- rbind(ecz, rhi, whe, sym)
+```
 
+## plot pval<0.05
+
+```{r}
 sigtax <- planttaxa %>%
-  filter(
-    pval < 0.05 & covariate %in%
-      c("meaneczema", "meanrhinitis", "meanwheezing", "allergy_symptoms")
+  filter(pval < 0.05 & covariate %in%
+           c("meaneczema", "meanrhinitis", "meanwheezing", "allergy_symptoms")
   )
+
 planttaxa <- planttaxa %>%
-  filter(name %in% sigtax$name) %>%
-  mutate(significance = ifelse(pval < 0.05, "*", "")) %>%
-  mutate(
-    covariate = fct_recode(
-      covariate,
-      "Eczema symptoms" = "meaneczema",
-      "Rhinitis symptoms" = "meanrhinitis",
-      "Wheezing & asthma symptoms" = "meanwheezing",
-      "Allergy categories count" = "allergy_symptoms",
-      "Urban landscape" = "landscape_typelow naturalness",
-      "Grey schoolground" = "school_contextlow greenness",
-      "Natural elements score" = "natural_elements_score"
-    )
+  filter(taxon_name %in% sigtax$taxon_name) %>%
+  mutate(estimate = ifelse(estimate < -20, -20, estimate)) %>% # rescale outlier
+  mutate(covariate = fct_recode(
+    covariate,
+    "Eczema symptoms" = "meaneczema",
+    "Rhinitis symptoms" = "meanrhinitis",
+    "Wheezing & asthma symptoms" = "meanwheezing",
+    "Allergy categories count" = "allergy_symptoms",
+    "Urban landscape" = "landscape_typelow naturalness",
+    "Grey schoolground" = "school_contextlow greenness",
+    "Natural elements score" = "natural_elements_score")
   ) %>%
-  mutate(
-    covariate = fct_relevel(
-      covariate,
-      "Urban landscape",
-      "Grey schoolground",
-      "Natural elements score",
-      "Eczema symptoms",
-      "Rhinitis symptoms",
-      "Wheezing & asthma symptoms",
-      "Allergy categories count"
-    )
+  mutate(covariate = fct_relevel(
+    covariate,
+    "Urban landscape", "Grey schoolground", "Natural elements score",
+    "Eczema symptoms", "Rhinitis symptoms", "Wheezing & asthma symptoms",
+    "Allergy categories count")
+  ) %>%
+  mutate(taxon_name = fct_recode(
+    taxon_name,
+    "Unknown in fam Chroococcidiopsis" = "ALVU_g 1",
+    "Unknown in order Frankiales 1" = "HQ910322_g 1",
+    "Unknown in order Frankiales 2" = "HQ910322_g 2",
+    "Unknown in fam Rubricoccaceae" = "JF047598_g 1")
   )
 
 # Figures
 
-ggplot(planttaxa, aes(y = covariate, x = name, fill = estimate)) +
+ggplot(planttaxa, aes(y = covariate, x = taxon_name, fill = estimate)) +
   geom_tile() +
   scale_fill_gradient2(low = "darkgreen", mid = "white", high = "darkorange") +
-  geom_text(aes(label = significance), color = "black", size = 5) +
-  xlab("Plant ASVs") +
-  ylab("") +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = -45, hjust = 0))
-
-
-fplanttaxa <- planttaxa %>%
-  filter(
-    covariate %in% c(
-      "Eczema symptoms",
-      "Rhinitis symptoms",
-      "Wheezing & asthma symptoms",
-      "Allergy categories count"
-    )
-  )
-ggplot(fplanttaxa, aes(y = covariate, x = name, fill = estimate)) +
-  geom_tile() +
-  scale_fill_gradient2(low = "darkgreen", mid = "white", high = "darkorange") +
-  geom_text(aes(label = significance), color = "black", size = 5) +
   xlab("Plant ASVs") +
   ylab("") +
   theme_bw() +
@@ -728,44 +694,43 @@ ggplot(fplanttaxa, aes(y = covariate, x = name, fill = estimate)) +
 ```
 
 
+
 # Allergy-specific bacteria in sand dirt dust (radEmu)
 
 (Figure in supplementary materials)
+(this code could take a while to run!)
 
-```{r rademu-sanddirtdust-samples}
+```{r}
 y1 <- rune %>%
-  filter_samples(sample_type %in% c("sand", "dirt", "dust")) %>%
-  select_samples(
-    school_id, sample_id, sample_type, meaneczema, meanrhinitis,
-    meanwheezing, allergy_symptoms, natural_elements_score, school_context,
-    landscape_type
-  ) %>%
-  aggregate_samples() %>%
-  add_prevalence()
+  filter_samples(sample_type %in% c("sand", "dirt", "dust"))
 
 y1$samples <- drop_na(y1$samples, allergy_symptoms)
 y1$counts <- filter(y1$counts, sample_id %in% y1$samples$sample_id)
+y1$taxa <- left_join(y1$taxa, taxn)
 
-y1$taxa <- y1$taxa %>%
-  arrange(desc(prevalence)) %>%
-  left_join(taxn) %>%
-  mutate(keep = FALSE) %>%
-  {
-    .$keep[1:100] <- TRUE
-    .
-  }
+# first filter taxa then pool
 
 y1 <- y1 %>%
-  mutate_taxa(name = ifelse(keep == FALSE, "other", taxon_name)) %>%
-  select_taxa(taxon_id, name) %>%
-  aggregate_taxa()
-samp <- select(
-  y1$samples, sample_id, sample_type, meaneczema, meanrhinitis, meanwheezing,
-  allergy_symptoms, school_id
-)
+  add_prevalence(relative = T) %>%
+  add_mean_rel_abundance() %>%
+  mutate_taxa(taxon_name = ifelse(prevalence > 0.2, taxon_name, "other")) %>%
+  mutate_taxa(taxon_name =
+                ifelse(mean_rel_abundance > 0.001, taxon_name, "other")) %>%
+  select_taxa(taxon_id, taxon_name) %>%
+  aggregate_taxa() %>%
+  select_samples(school_id, sample_id, meaneczema, meanrhinitis, meanwheezing,
+                 allergy_symptoms, sample_type, natural_elements_score,
+                 school_context, landscape_type) %>%
+  aggregate_samples()
+
+samp <- select(y1$samples,
+               sample_id, sample_type, meaneczema, meanrhinitis, meanwheezing,
+               allergy_symptoms, school_id)
 rownames(samp) <- samp$sample_id
 y <- tidy_count_to_matrix(y1$counts)[samp$sample_id, ]
-design <- radEmu::make_design_matrix(formula = ~ sample_type + meaneczema, data = samp)
+design <- radEmu::make_design_matrix(
+  formula = ~ sample_type + meaneczema, data = samp
+)
 colnames(design)
 
 xfun::cache_exec(
@@ -775,58 +740,63 @@ xfun::cache_exec(
       data = samp,
       Y = y,
       cluster = samp$school_id,
-      test_kj = data.frame(j = c(1:101), k = 4)
+      test_kj = data.frame(k = "meaneczema", j = seq_len(ncol(y)))
     )
     fit2 <- radEmu::emuFit(
       formula = ~ sample_type + meanrhinitis,
       data = samp,
       Y = y,
       cluster = samp$school_id,
-      test_kj = data.frame(j = c(1:101), k = 4)
+      test_kj = data.frame(k = "meanrhinitis", j = seq_len(ncol(y)))
     )
     fit3 <- radEmu::emuFit(
       formula = ~ sample_type + meanwheezing,
       data = samp,
       Y = y,
       cluster = samp$school_id,
-      test_kj = data.frame(j = c(1:101), k = 4)
+      test_kj = data.frame(k = "meanwheezing", j = seq_len(ncol(y)))
     )
     fit4 <- radEmu::emuFit(
       formula = ~ sample_type + allergy_symptoms,
       data = samp,
       Y = y,
       cluster = samp$school_id,
-      test_kj = data.frame(j = c(1:101), k = 4)
+      test_kj = data.frame(k = "allergy_symptoms", j = seq_len(ncol(y)))
     )
   },
   path = "source/extra_microbiome_analyses_cache/"
 )
+
 ecz <- fit1$coef %>%
   filter(covariate == "meaneczema") %>%
   mutate(taxon_id = category) %>%
   left_join(y1$taxa) %>%
-  select(covariate, name, estimate, pval)
+  select(covariate, taxon_name, estimate, pval) %>%
+  mutate(qval = p.adjust(pval, method = "BH"))
 ecz
 
 rhi <- fit2$coef %>%
   filter(covariate == "meanrhinitis") %>%
   mutate(taxon_id = category) %>%
   left_join(y1$taxa) %>%
-  select(covariate, name, estimate, pval)
+  select(covariate, taxon_name, estimate, pval) %>%
+  mutate(qval = p.adjust(pval, method = "BH"))
 rhi
 
 whe <- fit3$coef %>%
   filter(covariate == "meanwheezing") %>%
   mutate(taxon_id = category) %>%
   left_join(y1$taxa) %>%
-  select(covariate, name, estimate, pval)
+  select(covariate, taxon_name, estimate, pval) %>%
+  mutate(qval = p.adjust(pval, method = "BH"))
 whe
 
 sym <- fit4$coef %>%
   filter(covariate == "allergy_symptoms") %>%
   mutate(taxon_id = category) %>%
   left_join(y1$taxa) %>%
-  select(covariate, name, estimate, pval)
+  select(covariate, taxon_name, estimate, pval) %>%
+  mutate(qval = p.adjust(pval, method = "BH"))
 sym
 
 soiltaxa <- rbind(ecz, rhi, whe, sym)
@@ -836,60 +806,6 @@ sigtax <- soiltaxa %>%
     pval < 0.05 & covariate %in%
       c("meaneczema", "meanrhinitis", "meanwheezing", "allergy_symptoms")
   )
-soiltaxa <- soiltaxa %>%
-  filter(name %in% sigtax$name) %>%
-  mutate(significance = ifelse(pval < 0.05, "*", "")) %>%
-  mutate(
-    covariate = fct_recode(
-      covariate,
-      "Eczema symptoms" = "meaneczema",
-      "Rhinitis symptoms" = "meanrhinitis",
-      "Wheezing & asthma symptoms" = "meanwheezing",
-      "Allergy categories count" = "allergy_symptoms",
-      "Urban landscape" = "landscape_typelow naturalness",
-      "Grey schoolground" = "school_contextlow greenness",
-      "Natural elements score" = "natural_elements_score"
-    )
-  ) %>%
-  mutate(
-    covariate = fct_relevel(
-      covariate,
-      "Urban landscape",
-      "Grey schoolground",
-      "Natural elements score",
-      "Eczema symptoms",
-      "Rhinitis symptoms",
-      "Wheezing & asthma symptoms",
-      "Allergy categories count"
-    )
-  )
-
-ggplot(soiltaxa, aes(y = covariate, x = name, fill = estimate)) +
-  geom_tile() +
-  scale_fill_gradient2(low = "darkgreen", mid = "white", high = "darkorange") +
-  geom_text(aes(label = significance), color = "black", size = 5) +
-  xlab("Sand/soil ASVs") +
-  ylab("") +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = -45, hjust = 0))
-
-fsoiltaxa <- soiltaxa %>%
-  filter(
-    covariate %in% c(
-      "Eczema symptoms",
-      "Rhinitis symptoms",
-      "Wheezing & asthma symptoms",
-      "Allergy categories count"
-    )
-  )
-ggplot(fsoiltaxa, aes(y = covariate, x = name, fill = estimate)) +
-  geom_tile() +
-  scale_fill_gradient2(low = "darkgreen", mid = "white", high = "darkorange") +
-  geom_text(aes(label = significance), color = "black", size = 5) +
-  xlab("Sand/soil/dust ASVs") +
-  ylab("") +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = -45, hjust = 0))
 ```
 
 
@@ -897,75 +813,67 @@ ggplot(fsoiltaxa, aes(y = covariate, x = name, fill = estimate)) +
 
 (this code could take a while to run!)
 
-```{r rademu-skin-samples}
+```{r}
 y1 <- runs %>%
-  add_prevalence()
+  add_prevalence(relative = TRUE)
 
 ggplot(y1$taxa, aes(x = prevalence)) +
-  geom_histogram(binwidth = 1) +
-  xlim(c(20, 160)) +
+  geom_histogram() +
+  xlim(c(0.02, 1)) +
   # scale_y_log10()+
   labs(x = "Prevalence in skin samples", y = "ASV count") +
-  geom_vline(xintercept = 96.5, col = "blue")
+  geom_vline(xintercept = 0.2, col = "blue")
 
 y1$samples <- drop_na(y1$samples, allergy_symptoms)
 y1$counts <- filter(y1$counts, sample_id %in% y1$samples$sample_id)
+y1$taxa <- left_join(y1$taxa, taxn)
 
-y1$taxa <- y1$taxa %>%
-  arrange(desc(prevalence)) %>%
-  left_join(taxn) %>%
-  mutate(keep = F) %>%
-  {
-    .$keep[1:200] <- T
-    .
-  }
+# first filter taxa then pool
 
 y1 <- y1 %>%
-  mutate_taxa(name = ifelse(keep == FALSE, "other", taxon_name)) %>%
-  select_taxa(taxon_id, name) %>%
-  aggregate_taxa() %>%
-  add_prevalence()
+  select_taxa(-prevalence) %>%
+  add_prevalence(relative = TRUE) %>%
+  add_mean_rel_abundance() %>%
+  mutate_taxa(taxon_name = ifelse(prevalence > 0.2, taxon_name, "other")) %>%
+  mutate_taxa(
+    taxon_name = ifelse(mean_rel_abundance > 0.001, taxon_name, "other")
+  ) %>%
+  select_taxa(taxon_id, taxon_name) %>%
+  aggregate_taxa()
 
-mostprevskin <- y1$taxa %>%
-  left_join(rune$taxa) %>%
-  select(name, family, class, phylum, prevalence)
-#write.csv(mostprevskin, "mostprevskin.csv", quote = F, row.names = F) # for supplementary materials
-
-samp <- select(y1$samples,
-               sample_id,
-               Eczema,
-               Rhinitis,
-               Wheezing,
-               allergy_symptoms,
-               school_id)
+samp <- select(
+  y1$samples,
+  sample_id, Eczema, Rhinitis, Wheezing, allergy_symptoms, school_id
+)
 rownames(samp) <- samp$sample_id
 y <- tidy_count_to_matrix(y1$counts)[samp$sample_id, ]
+
 
 xfun::cache_exec(
   {
     fit1 <- radEmu::emuFit(
-      formula = ~ Eczema,
+      formula = ~Eczema,
       data = samp,
       Y = y,
       cluster = samp$school_id,
       test_kj = data.frame(k = "Eczema", j = seq_len(ncol(y)))
     )
     fit2 <- radEmu::emuFit(
-      formula = ~ Rhinitis,
+      formula = ~Rhinitis,
       data = samp,
       Y = y,
       cluster = samp$school_id,
       test_kj = data.frame(k = "Rhinitis", j = seq_len(ncol(y)))
     )
     fit3 <- radEmu::emuFit(
-      formula = ~ Wheezing,
+      formula = ~Wheezing,
       data = samp,
       Y = y,
       cluster = samp$school_id,
       test_kj = data.frame(k = "Wheezing", j = seq_len(ncol(y)))
     )
     fit4 <- radEmu::emuFit(
-      formula = ~ allergy_symptoms,
+      formula = ~allergy_symptoms,
       data = samp,
       Y = y,
       cluster = samp$school_id,
@@ -979,64 +887,64 @@ ecz <- fit1$coef %>%
   filter(covariate == "Eczema") %>%
   mutate(taxon_id = category) %>%
   left_join(y1$taxa) %>%
-  select(covariate, name, estimate, pval)
+  select(covariate, taxon_name, estimate, pval) %>%
+  mutate(qval = p.adjust(pval, method = "BH"))
 ecz
 
 rhi <- fit2$coef %>%
   filter(covariate == "Rhinitis") %>%
   mutate(taxon_id = category) %>%
   left_join(y1$taxa) %>%
-  select(covariate, name, estimate, pval)
+  select(covariate, taxon_name, estimate, pval) %>%
+  mutate(qval = p.adjust(pval, method = "BH"))
 rhi
 
 whe <- fit3$coef %>%
   filter(covariate == "Wheezing") %>%
   mutate(taxon_id = category) %>%
   left_join(y1$taxa) %>%
-  select(covariate, name, estimate, pval)
+  select(covariate, taxon_name, estimate, pval) %>%
+  mutate(qval = p.adjust(pval, method = "BH"))
 whe
 
 sym <- fit4$coef %>%
   filter(covariate == "allergy_symptoms") %>%
   mutate(taxon_id = category) %>%
   left_join(y1$taxa) %>%
-  select(covariate, name, estimate, pval)
+  select(covariate, taxon_name, estimate, pval) %>%
+  mutate(qval = p.adjust(pval, method = "BH"))
 sym
 
 skintaxa <- rbind(ecz, rhi, whe, sym)
 
+saveRDS(
+  skintaxa,
+  here("source", "extra_microbiome_analyses_cache",
+       "skintaxa_rademu_0.2_pooled.RDS")
+)
+
 sigtax <- skintaxa %>%
   filter(pval < 0.05 &
-           covariate %in% c("Eczema", "Rhinitis", "Wheezing", "allergy_symptoms"))
+           covariate %in%
+           c("Eczema", "Rhinitis", "Wheezing", "allergy_symptoms")
+  )
 skintaxa <- skintaxa %>%
-  filter(name %in% sigtax$name) %>%
+  filter(taxon_name %in% sigtax$taxon_name) %>%
   mutate(significance = ifelse(pval < 0.05, "*", "")) %>%
-  mutate(
-    covariate = fct_recode(
-      covariate,
-      "Eczema symptoms" = "Eczema",
-      "Rhinitis symptoms" = "Rhinitis",
-      "Wheezing & asthma symptoms" = "Wheezing",
-      "Allergy categories count" = "allergy_symptoms",
-      "Urban landscape" = "landscape_typelow naturalness",
-      "Grey schoolground" = "school_contextlow greenness",
-      "Natural elements score" = "natural_elements_score"
-    )
+  mutate(covariate = fct_recode(
+    covariate,
+    "Eczema symptoms" = "Eczema",
+    "Rhinitis symptoms" = "Rhinitis",
+    "Wheezing & asthma symptoms" = "Wheezing",
+    "Allergy categories count" = "allergy_symptoms")
   ) %>%
-  mutate(
-    covariate = fct_relevel(
-      covariate,
-      "Urban landscape",
-      "Grey schoolground",
-      "Natural elements score",
-      "Eczema symptoms",
-      "Rhinitis symptoms",
-      "Wheezing & asthma symptoms",
-      "Allergy categories count"
-    )
+  mutate(covariate = fct_relevel(
+    covariate,
+    "Eczema symptoms", "Rhinitis symptoms", "Wheezing & asthma symptoms",
+    "Allergy categories count")
   )
 
-ggplot(skintaxa, aes(y = covariate, x = name, fill = estimate)) +
+ggplot(skintaxa, aes(y = covariate, x = taxon_name, fill = estimate)) +
   geom_tile() +
   scale_fill_gradient2(low = "darkgreen", mid = "white", high = "darkorange") +
   geom_text(aes(label = significance), color = "black", size = 5) +
