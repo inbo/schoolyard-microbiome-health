@@ -1884,7 +1884,6 @@ p
 
 ```{r}
 planttaxa <- planttaxa %>%
-  rename(taxon_name = name) %>%
   left_join(taxn)
 
 runp <- rune %>%
@@ -1995,7 +1994,7 @@ transfer2 <- transfer %>%
   ) %>% # text in block
   mutate(estimate = -child * 20) %>% # color adjustement
   select(-child)
-planttaxa2 <- rbind(planttaxa2, transfer2)
+planttaxa2 <- bind_rows(planttaxa2, transfer2)
 
 ggplot(planttaxa2,
        aes(y = covariate, x = taxon_name_overall, fill = estimate)) +
